@@ -29,6 +29,7 @@ class EpisodeLog:
     a_brake: float
     margin: float
     stalls: int
+    dt: float = 0.1
     ticks: dict[str, np.ndarray] = field(default_factory=dict)
 
     def summary(self) -> dict[str, Any]:
@@ -71,5 +72,5 @@ def run_episodes(pilot: Pilot, env: DroneEnv, scenes: Sequence[Scene], speed_cap
             method=pilot.mode, governor=pilot.use_governor, family=scene.family, seed=scene.seed,
             speed_cap=float(speed_cap), success=bool(info["goal_reached"]), collision=bool(info["collision"]),
             timeout=bool(info["timeout"]), time=float(info["time"]), distance=float(info["distance"]),
-            a_brake=pilot.a, margin=cfg.drone.margin, stalls=pilot.executor.stalls, ticks=ticks))
+            a_brake=pilot.a, margin=cfg.drone.margin, stalls=pilot.executor.stalls, dt=cfg.dt, ticks=ticks))
     return logs

@@ -7,9 +7,13 @@ base: light.yaml
 run:
   out_dir: runs/light_surrogate
 
+sim:
+  render: false           # the surrogate needs no pixels and clearance is the oracle: skip the cameras
+
 model:
   policy: surrogate
 
 eval:
-  episodes_per_cell: 4
+  episodes_per_cell: 50   # scenes per family, so 200 per (method, governor, cap) cell
   speed_caps: [2.0, 4.0, 6.0, 8.0, 10.0]
+  workers: 4

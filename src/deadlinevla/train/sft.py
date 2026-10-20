@@ -15,7 +15,7 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
-from deadlinevla.budget.allocator import allocate, camera_axes, quality_table, view_weights
+from deadlinevla.budget.allocator import camera_axes, choose_allocation, quality_table, view_weights
 from deadlinevla.budget.deadline import max_latency
 from deadlinevla.budget.latency_model import LatencyModel, synthetic_prior
 from deadlinevla.config import Config, a_brake
@@ -115,7 +115,8 @@ def offline_eval(adapter: PolicyAdapter, val: DemoDataset, allocs: dict[str, Any
                     speed = float(np.linalg.norm(v_body))
                     L_max = max_latency(speed, it["clearance"], a_brake(cfg), cfg.drone.margin)
                     w = view_weights(v_body, axes, cfg.budget.kappa, cfg.budget.epsilon, cfg.budget.hover_speed)
-                    rows.append(allocate(w, L_max, lat, q)[0])
+                    rows.append(choose_allocation(w, L_max, lat, q, cfg.budget.objective,
+                                                  cfg.budget.qmin_mid_weight)[0])
                 A = np.stack(rows)
             else:
                 A = np.tile(np.asarray(alloc), (len(items), 1))

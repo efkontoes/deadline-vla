@@ -15,9 +15,11 @@ sim:
   altitude: 1.5           # nominal flight altitude, m
   goal_radius: 1.0
   max_range: 20.0         # clearance / depth range cap, m
+  render: true            # false skips cameras (surrogate policy with oracle clearance only)
 
 drone:
   a_brake: measured       # max braking deceleration a, from measure_braking
+  tau_track: measured     # velocity-tracking time constant of the controller, from env-check
   v_max: 8.0              # hard speed cap, m/s
   margin: 0.5             # safety margin m, m
   ctrl_hz: 10.0           # rate velocity commands are sent
@@ -37,7 +39,7 @@ cameras:
     - {res: 512, tokens: 256}
 
 scenes:
-  families: [goal_nav, rear_threat, slalom]
+  families: [goal_nav, sparse_nav, rear_threat, slalom]
   clutter_density: 0.03   # obstacles per m^2
   seed: 0
   goal_dist: [8.0, 18.0]
@@ -86,6 +88,9 @@ budget:
   hover_speed: 0.3
   max_residual: 0.005     # s; worst linear-fit residual above which predict uses the table
   floor_ignore_z: 0.2     # depth clearance ignores points below this height
+  objective: speed        # speed: cheapest allocation meeting Q_min (v2) | quality: max quality s.t. L <= L_max (v1)
+  qmin_mid_weight: 0.25   # Q_min: views with weight >= this need mid tier, the rest low
+  governor_delays: true   # governor blind time = L + control period + tracking time constant
 
 serve:
   mode: async             # sync | async
@@ -95,13 +100,14 @@ serve:
   profile_iters: 20
 
 eval:
-  methods: [deadline, all_high, uniform_fixed, importance, front_only]
+  methods: [deadline, deadline_v1, all_high, uniform_fixed, importance, front_only]
   governor: [true, false]
   episodes_per_cell: 10
   speed_caps: [2.0, 4.0, 6.0, 8.0, 10.0]
   uniform_tier: 2
   collision_threshold: 1.0   # collisions per km for the speed-vs-compute plot
   seed_offset: 10000
+  workers: 1              # parallel processes for the eval sweep
 
 gates:
   max_violation_rate: null   # set after first baseline

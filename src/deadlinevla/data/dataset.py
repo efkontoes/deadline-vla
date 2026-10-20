@@ -10,7 +10,7 @@ from typing import Any, Iterator, Optional
 
 import numpy as np
 
-from deadlinevla.budget.allocator import allocate, camera_axes, quality_table, view_weights
+from deadlinevla.budget.allocator import camera_axes, choose_allocation, quality_table, view_weights
 from deadlinevla.budget.deadline import max_latency
 from deadlinevla.budget.latency_model import LatencyModel, synthetic_prior
 from deadlinevla.config import Config, a_brake
@@ -132,7 +132,8 @@ def sample_alloc(cfg: Config, rng: np.random.Generator, latency: Optional[Latenc
         L_max = max_latency(speed, d, a_brake(cfg), cfg.drone.margin)
         w = view_weights(v_body, camera_axes(cfg.cameras.cam_yaws), cfg.budget.kappa, cfg.budget.epsilon,
                          cfg.budget.hover_speed)
-        alloc, _ = allocate(w, L_max, lat, quality_table(cfg.budget.quality_fn, cfg.tier_tokens))
+        alloc, _ = choose_allocation(w, L_max, lat, quality_table(cfg.budget.quality_fn, cfg.tier_tokens),
+                                     cfg.budget.objective, cfg.budget.qmin_mid_weight)
         alloc = alloc.copy()
     was_on = alloc.any()
     alloc[rng.random(V) < cfg.train.p_view_off] = 0

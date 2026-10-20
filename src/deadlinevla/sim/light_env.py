@@ -146,8 +146,11 @@ class LightDroneEnv:
 
     def _obs(self, info: dict[str, Any]) -> dict[str, Any]:
         cfg = self.cfg
-        images, depth = render_cameras(self.pos, self.yaw, self.scene, self.t, self.res, cfg.cameras.fov,
-                                       cfg.cameras.cam_yaws, cfg.sim.max_range)
+        if cfg.sim.render:
+            images, depth = render_cameras(self.pos, self.yaw, self.scene, self.t, self.res, cfg.cameras.fov,
+                                           cfg.cameras.cam_yaws, cfg.sim.max_range)
+        else:  # policies that need no pixels (the surrogate with oracle clearance) skip the cameras
+            images = depth = None
         cy, sy = math.cos(self.yaw), math.sin(self.yaw)
         vb = np.array([cy * self.vel[0] + sy * self.vel[1], -sy * self.vel[0] + cy * self.vel[1], self.vel[2]])
         state = np.array([vb[0], vb[1], vb[2], self.yaw_rate, 0.0, 0.0, self.pos[2]])

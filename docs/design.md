@@ -69,6 +69,12 @@ $$v^2 + 2aL\,v - 2a(d-m) = 0 \quad\Longrightarrow\quad v^{*}(L,d) = -aL + \sqrt{
 
 Check with the example: $a = 8, L = 0.125, d - m = 5$ gives $-1 + \sqrt{1 + 80} = 8$ m/s. The governor caps the commanded speed at $v^*$, using the latency of the allocation actually chosen.
 
+**v2 (after the first light-path sweep).** Three corrections, each found from the per-tick violation-cause log:
+
+- *Blind time.* The governor acts once per control period, and the velocity controller tracks its command with a first-order lag. Its blind time is therefore $L_{\text{gov}} = L + \Delta t + \tau_{\text{track}}$, with $\tau_{\text{track}}$ measured by `env-check` from a small unsaturated step (light sim: 0.09 s), like $a$. With $L$ alone, $v^*$ fell by ~0.4 m/s per tick on approach while the drone shed only ~63% of the gap per tick. 85–90% of governed violations were this lag; with the fix, the governed violation rate fell from 19–32% to under ~1%.
+- *Direction.* $d$ for the governor is $\min(d_{\text{cmd}}, d_{\text{vel}})$ while moving (a turn sweeps from the current velocity to the command), and $d_{\text{cmd}}$ alone at hover speed, so a drone inside the margin can always be commanded away.
+- *Margin.* No "creep" inside the margin: $v^*$ with $m = 0$ allows driving into contact.
+
 ### 3. Latency model of the onboard computer (`budget/latency_model.py`)
 
 Each camera $j$ gets a resolution tier $r_j \in \{0 = \text{off}, 1 = \text{low}, 2 = \text{mid}, 3 = \text{high}\}$. Measured once per board:
@@ -101,6 +107,16 @@ $$\mathbf{r}^{*} = \arg\max_{\mathbf{r}} \sum_{j} w_j\, q(r_j) \quad \text{s.t.}
 - the floor constraint keeps every view at least on low resolution when the budget allows, so a threat from behind still reaches the model
 
 With 4096 candidates and a precomputed latency table, exact search costs microseconds. If no allocation meets the deadline, take the cheapest allocation and let the governor slow the drone to $v^*$ for its latency.
+
+**v2 objective (replaces the above as the default, `budget.objective: speed`).** With latency only as a constraint, the v1 optimiser fills any slack with tokens (1,100–1,400 per tick in the first sweep). But with the governor on, latency is not free: it lowers the speed the drone may fly. With $a = 8.4$ and $D = 5$ m, $v^* = 7.85$ m/s at $L = 0.17$ s but 6.99 m/s at $L = 0.30$ s; at $D = 2$ m, 4.54 versus 3.80 m/s. So speed becomes the objective and perception the constraint:
+
+$$\mathbf{r}^{*} = \arg\max_{\mathbf{r}}\ v^{*}\big(L(\mathbf{r}), D\big) \quad \text{s.t.} \quad \sum_j w_j\, q(r_j) \ge Q_{\min}, \quad r_j \ge 1\ \forall j$$
+
+- $Q_{\min} = \sum_j w_j\, q(r^{\text{req}}_j)$, with $r^{\text{req}}_j$ = mid for views with $w_j \ge 0.25$ (`budget.qmin_mid_weight`) and low otherwise. Because it is weighted by $w_j$, the forward views must stay sharp when flying fast, and the savings come from the rear.
+- $v^*$ decreases in $L$ for every $D > 0$, so this is the **cheapest allocation that still sees enough**; $D$ drops out of the argmax.
+- The 360° floor stays a hard constraint. With the weighted $Q_{\min}$ alone, the optimiser switched rear views off and paid for it with a sharper front view (`[3,1,0,0,0,1]`), so a threat from behind would never reach the model.
+
+Wrong reading to avoid: this is not "always use few tokens". The allocator spends compute only where it buys safety, because compute is speed. The v1 objective is kept as the `deadline_v1` ablation.
 
 When hovering, $\hat{\mathbf{v}}$ is undefined: weights become uniform and the full 360 degree view serves the language task.
 
@@ -164,7 +180,7 @@ One YAML file, parsed into `Config` with one sub-config per section; every field
 | cameras | cam_yaws | optical axes u_j, degrees | 0, 60, 120, 180, 240, 300 |
 | cameras | model, fov | pinhole or fisheye, field of view | pinhole, about 90 degrees (ours) |
 | cameras | tiers | resolution per tier 1, 2, 3 | model dependent, set at M1 |
-| scenes | families | task families to generate | goal_nav, rear_threat, slalom |
+| scenes | families | task families to generate | goal_nav, sparse_nav (v2: quarter clutter, the deadline binds only some of the time), rear_threat, slalom |
 | scenes | clutter_density, seed | obstacle density and RNG seed | ours |
 | expert | planner | global path planner on the occupancy grid | A* |
 | expert | speed_profile | expert respects the same braking model | on |
@@ -268,12 +284,14 @@ Each function has one job and typed inputs. Shapes: V = 6 views, H = chunk lengt
 ### deadlinevla/eval/baselines.py
 - `baseline_alloc(name, state, table) -> Alloc` — B1 all_high: every view at tier 3. B2 uniform_fixed: every view at one tier, VLA-ACL style. B3 importance: tiers from attention importance of the last step, FastVLA style, no physics. B4 front_only: front view at tier 3, others off, AerialVLA style.
 - Each baseline is run with and without the governor, so the governor's own effect is separable.
+- v2: in the first sweep B3 had no importance signal and collapsed onto B2 in every cell. The surrogate now exposes per-camera obstacle proximity (sum of 1/distance over what each camera sees) as its stand-in for attention, and `eval` warns and annotates the report whenever B3 picks the B2 allocation on more than 95% of ticks.
 
 ### deadlinevla/eval/rollout.py
 - `run_episodes(pilot, env, scenes, speed_cap) -> list[EpisodeLog]` — Fixed seeds per scene so every method faces identical scenes. Logs per tick: speed, clearance, allocation, predicted and actual latency, commanded and governed velocity.
 
 ### deadlinevla/eval/metrics.py
 - `summarize(logs) -> Metrics` — Success rate, collisions per km, time to goal, mean speed, tokens per tick, and the deadline-violation rate: the fraction of ticks where v L_actual + v²/(2a) exceeds d − m.
+- v2: rates carry Wilson 95% intervals; violations count moving ticks only, use the latency of the inference actually being flown, and each violating tick is attributed to a cause (ungoverned, clearance jump, direction mismatch, dynamics lag, latency tail, latency switch, staleness, other). Two variants are reported alongside: clearance along the command, and the real information age.
 
 ### deadlinevla/eval/report.py
 - `speed_vs_compute(results) -> Figure` — Headline plot: highest speed cap at which each method keeps collisions per km below a threshold, against compute (tokens per tick or board). Also a time-to-goal versus collision-rate Pareto plot.

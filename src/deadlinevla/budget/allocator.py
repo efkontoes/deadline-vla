@@ -73,9 +73,54 @@ def search(weights: np.ndarray, limit: float, allocs: np.ndarray, costs: np.ndar
     return None
 
 
+def required_quality(weights: np.ndarray, quality_fn: np.ndarray, mid_weight: float = 0.25) -> float:
+    """Q_min = sum_j w_j q(r_req_j): views with w_j >= ``mid_weight`` need mid tier, the rest low.
+
+    Weighting by w_j means that when flying fast the forward views must stay sharp, while the
+    savings come from views facing away.
+    """
+    w = np.asarray(weights, dtype=np.float64)
+    req = np.where(w >= mid_weight, 2, 1)
+    return float(quality_fn[req] @ w)
+
+
+def allocate_for_speed(weights: np.ndarray, table: LatencyModel, quality_fn: np.ndarray,
+                       mid_weight: float = 0.25) -> tuple[np.ndarray, float]:
+    """Method step 5, v2: speed is the objective, perception the constraint.
+
+        r* = argmax_r v*(L(r), D)   s.t.   sum_j w_j q(r_j) >= Q_min
+
+    v* falls monotonically with L for every D > 0 (and is 0 for all r when D <= 0), so this is the
+    cheapest allocation that still sees enough; D drops out of the argmax. Ties go to higher quality.
+
+    The 360 degree floor (every view at least low) is kept as a hard constraint: with a weighted Q_min
+    alone, the optimiser would switch rear views off and pay for it with a sharper front view, and a
+    threat from behind would never reach the model.
+    """
+    allocs = table.allocs
+    lat = table.predict_all()
+    w = np.asarray(weights, dtype=np.float64)
+    score = quality_fn[allocs] @ w
+    ok = (score >= required_quality(w, quality_fn, mid_weight) - 1e-9) & (allocs >= 1).all(axis=1)
+    idx = np.flatnonzero(ok)
+    cheapest = idx[lat[idx] <= lat[idx].min() + 1e-12]
+    i = int(cheapest[np.argmax(score[cheapest])])
+    return np.array(allocs[i], dtype=np.int64), float(lat[i])
+
+
+def choose_allocation(weights: np.ndarray, L_max: float, table: LatencyModel, quality_fn: np.ndarray,
+                      objective: str = "speed", mid_weight: float = 0.25) -> tuple[np.ndarray, float]:
+    """Dispatch on ``budget.objective``: ``speed`` (v2) or ``quality`` (v1, the original doc)."""
+    if objective == "speed":
+        return allocate_for_speed(weights, table, quality_fn, mid_weight)
+    if objective == "quality":
+        return allocate(weights, L_max, table, quality_fn)
+    raise ValueError(f"unknown allocation objective {objective!r}")
+
+
 def allocate(weights: np.ndarray, L_max: float, table: LatencyModel,
              quality_fn: np.ndarray) -> tuple[np.ndarray, float]:
-    """Method step 5. Best feasible allocation and its predicted latency.
+    """Method step 5, v1. Best feasible allocation and its predicted latency.
 
     If nothing meets the deadline, returns the cheapest allocation; the governor then slows the drone
     to v* for that latency.

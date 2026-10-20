@@ -80,8 +80,9 @@ class SurrogatePolicy(PolicyAdapter):
             ang_r = np.arcsin(np.clip(r / np.maximum(dist, 1e-6), 0, 1))
             vis = (np.abs(off) <= self.half_fov + ang_r) & (dist - r <= self.ranges[tier])
             seen |= vis
-            imp[j] = vis.sum()
-        self._importance = imp + 0.1
+            # proximity importance (B3's stand-in for attention): near obstacles in view matter most
+            imp[j] = float((1.0 / np.maximum(dist[vis] - r[vis], 0.5)).sum())
+        self._importance = imp + 0.05
         return xy[seen], r[seen], vel[seen]
 
     def predict_chunk(self, obs, alloc):

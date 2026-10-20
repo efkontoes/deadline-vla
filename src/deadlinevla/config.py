@@ -40,11 +40,13 @@ class SimConfig:
     altitude: float = 1.5
     goal_radius: float = 1.0
     max_range: float = 20.0
+    render: bool = True       # False: skip cameras (only for policies that need no images)
 
 
 @dataclass(frozen=True)
 class DroneConfig:
     a_brake: Union[float, str] = "measured"
+    tau_track: Union[float, str] = "measured"   # velocity-tracking time constant of the controller
     v_max: float = 8.0
     margin: float = 0.5
     ctrl_hz: float = 10.0
@@ -71,7 +73,7 @@ class CamerasConfig:
 
 @dataclass(frozen=True)
 class ScenesConfig:
-    families: tuple[str, ...] = ("goal_nav", "rear_threat", "slalom")
+    families: tuple[str, ...] = ("goal_nav", "sparse_nav", "rear_threat", "slalom")
     clutter_density: float = 0.03
     seed: int = 0
     goal_dist: tuple[float, ...] = (8.0, 18.0)
@@ -130,6 +132,9 @@ class BudgetConfig:
     hover_speed: float = 0.3
     max_residual: float = 0.005
     floor_ignore_z: float = 0.2
+    objective: str = "speed"          # speed (v2: cheapest allocation that sees enough) | quality (v1)
+    qmin_mid_weight: float = 0.25     # views with w_j >= this need mid tier in Q_min, the rest low
+    governor_delays: bool = True      # governor blind time = L + control period + tracking time constant
 
 
 @dataclass(frozen=True)
@@ -143,13 +148,14 @@ class ServeConfig:
 
 @dataclass(frozen=True)
 class EvalConfig:
-    methods: tuple[str, ...] = ("deadline", "all_high", "uniform_fixed", "importance", "front_only")
+    methods: tuple[str, ...] = ("deadline", "deadline_v1", "all_high", "uniform_fixed", "importance", "front_only")
     governor: tuple[bool, ...] = (True, False)
     episodes_per_cell: int = 10
     speed_caps: tuple[float, ...] = (2.0, 4.0, 6.0, 8.0, 10.0)
     uniform_tier: int = 2
     collision_threshold: float = 1.0
     seed_offset: int = 10000
+    workers: int = 1                  # parallel processes for the eval sweep
 
 
 @dataclass(frozen=True)
@@ -319,14 +325,22 @@ def validate(cfg: Config) -> None:
         raise ConfigError("tier token counts must strictly increase")
     if cfg.sim.backend not in ("isaac", "light"):
         raise ConfigError(f"sim.backend must be isaac or light, got {cfg.sim.backend!r}")
+    if cfg.budget.objective not in ("speed", "quality"):
+        raise ConfigError("budget.objective must be speed or quality")
+    if not cfg.sim.render and cfg.budget.clearance_source == "depth":
+        raise ConfigError("budget.clearance_source=depth needs sim.render=true")
+    if not cfg.sim.render and cfg.model.policy not in ("surrogate",):
+        raise ConfigError(f"model.policy={cfg.model.policy} needs images: set sim.render=true")
     if cfg.budget.clearance_source not in ("oracle", "depth"):
         raise ConfigError("budget.clearance_source must be oracle or depth")
     if cfg.serve.mode not in ("sync", "async"):
         raise ConfigError("serve.mode must be sync or async")
     if cfg.train.alloc_sampler not in ("uniform", "allocator", "mixed"):
         raise ConfigError("train.alloc_sampler must be uniform, allocator or mixed")
-    if isinstance(cfg.drone.a_brake, str) and cfg.drone.a_brake != "measured":
-        raise ConfigError("drone.a_brake must be a number or 'measured'")
+    for name in ("a_brake", "tau_track"):
+        v = getattr(cfg.drone, name)
+        if isinstance(v, str) and v != "measured":
+            raise ConfigError(f"drone.{name} must be a number or 'measured'")
     if len(cfg.model.surrogate_ranges) != 4:
         raise ConfigError("model.surrogate_ranges needs one range per tier 0..3")
 
@@ -345,6 +359,14 @@ def a_brake(cfg: Config) -> float:
     if isinstance(a, str):
         raise ConfigError("drone.a_brake is still 'measured': run env-check first or resolve it")
     return float(a)
+
+
+def tau_track(cfg: Config) -> float:
+    """The measured velocity-tracking time constant; fails loudly if it was never resolved."""
+    t = cfg.drone.tau_track
+    if isinstance(t, str):
+        raise ConfigError("drone.tau_track is still 'measured': run env-check first or resolve it")
+    return float(t)
 
 
 def save_resolved(cfg: Config, out_dir: str | Path) -> Path:

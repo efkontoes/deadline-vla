@@ -68,36 +68,56 @@ detected if it is inside an active camera's field of view and within that tier's
 **mock** policy is a small numpy MLP that exercises the training contract (variable views, view/tier
 codes, per-sample allocations); it is a plumbing test, not a pilot.
 
-## First light-path result (synthetic board, surrogate policy, 12 scenes per cell)
+## Light-path results, v2 (synthetic board, surrogate policy)
+
+200 scenes per cell (50 per family × 4 families), 6 methods × governor on/off × 5 speed caps =
+12,000 episodes; about 2.5 min on 4 laptop cores. Reproduce with
+`deadlinevla all --config configs/light_surrogate.yaml`. Full tables, Wilson intervals and the
+violation-cause breakdown are in `runs/light_surrogate/report/report.md`.
 
 ![speed vs compute](runs/light_surrogate/report/speed_vs_compute.png)
+![rear threat](runs/light_surrogate/report/rear_threat.png)
 
-Read honestly, this toy setup does **not** yet support the headline claim:
+- **Static families (goal_nav, sparse_nav, slalom), governed: zero collisions in 6,000 episodes.** The v2
+  allocator is the fastest method with 100% success (3.54 m/s at the 10 m/s cap, versus 3.42 for uniform
+  B2) on ~215 tokens per tick, about 45% fewer than B2's 384. B4 front-only is about as fast but succeeds
+  only 88% of the time (goals behind it). v1 and all-high are the slowest (≈2.8 m/s) and time out more.
+- **rear_threat, governed:** every governed collision happens here, because the governor watches only
+  the cone ahead and cannot react to an obstacle closing from behind. v2 collides in 10% of episodes
+  [4–21%], the same as B2/B3; v1 and all-high collide in 22%. With n = 50 the v2-vs-uniform difference
+  is not resolvable.
+- **Governed violation rate: 0.2–1%** (was 19–32% before the governor fixes below), well under the ~5%
+  expected from the p95 latency tail.
+- **Without the governor**, every method crashes in 25–37% of episodes at caps ≥ 8 m/s.
 
-- The **governor** is what buys safety: without it, every method collides at ≥ 30 collisions/km once
-  the cap exceeds 4–6 m/s; with it, most cells reach zero.
-- The **deadline allocator** spends heavily whenever there is slack (≈1100–1400 tokens/tick, ~0.3 s
-  latency), and in this setup a cheap uniform allocation (B2, 384 tokens, ~0.17 s) flies faster. The
-  objective rewards tokens, not freshness, and the surrogate's value of a tier is only its range.
-- Deadline-violation rates stay at 10–35 % even with the governor (see below).
+All latency here comes from an invented board, so the numbers say nothing yet about an Orin.
 
-These are properties of the method as specified meeting a toy perception model, which is exactly what
-the light path is for; they are the first things to look at (quality function, a latency term in the
-objective, κ/ε, `surrogate_ranges`) before M5 runs it with a real model and board latency.
+### What changed from v1, and why
+
+| Change | Evidence |
+|---|---|
+| Allocator objective is now *speed* (`budget.objective: speed`): the cheapest allocation meeting a weighted perception floor Q_min, with every view at least low | v1 filled any slack with ~1,300 tokens; with the governor on, latency costs speed (a = 8.4, D = 5 m: v* 7.85 → 6.99 m/s from L = 0.17 → 0.30 s). v1 kept as `deadline_v1` |
+| 360° floor kept as a hard constraint in v2 | Without it, the weighted Q_min switched rear views off and paid with a sharper front view (`[3,1,0,0,0,1]`) |
+| Governor blind time L + dt + τ_track, with τ_track measured by `env-check` (0.09 s) | Violation-cause log: 85–90% of governed violations were `dynamics_lag`, where v* fell ~0.4 m/s per tick but the velocity controller closed only ~63% of the gap |
+| Governor clearance = min(command, velocity) while moving, command only at hover | A turn sweeps both directions; at hover the drone must still be able to back away |
+| Per-tick violation causes, Wilson intervals, moving-ticks-only violation rate | Needed to tell bugs from physics |
+| B3 uses per-camera obstacle proximity; eval warns if B3 ≈ B2 on > 95% of ticks | B3 was identical to B2 in every cell |
+| `sparse_nav` family (quarter clutter); 50 scenes per family; `rear_threat` reported separately from the static families | Governor always bound in clutter; 6 scenes per cell was too few; rear-threat failures hid the static-family result |
+| `sim.render: false` for the surrogate, parallel sweep (`eval.workers`) | 12,000 episodes went from hours to minutes |
 
 ## Implementation notes (where the code goes beyond or interprets the design doc)
 
 - **Braking.** `measure_braking` returns the conservative `min_v v²/(2 s(v))`, so `v²/(2a)` bounds every
   measured stop including controller lag (light sim: a ≈ 8.4 m/s²).
-- **Governor clearance.** The deadline uses clearance along the current velocity (doc step 1). The
-  governor uses clearance along the *commanded* direction; otherwise a drone inside the margin can never
-  be commanded away and deadlocks.
+- **Governor.** The deadline uses clearance along the current velocity (doc step 1). The governor uses
+  min(command, velocity) clearance while moving and command clearance at hover, so a drone inside the
+  margin can be commanded away. Its blind time is L + dt + τ_track (see the v2 table above).
 - **Latency in simulation.** Rollouts sample latency from the board (synthetic, or the measured Jetson
   table replayed as a lognormal with its p50/p95, clipped at max), never from the desktop. This is the
   "injected delay in sim" answer to the hardware-in-the-loop risk.
 - **Async splicing.** If latency exceeds the chunk horizon, the chunk's last action is kept rather than
   nothing.
-- **Violation rate** counts moving ticks only (v ≥ hover speed); while hovering L_max is infinite.
+- **Violation rate** counts moving ticks only (v ≥ hover speed), since while hovering L_max is infinite. It uses the latency of the inference whose chunk is actually being flown.
 - **Linear latency fit.** `c` and `e(r)` are only separable with per-stage timings (`encode`, `prefill`);
   from totals alone the fit reports an effective per-view cost per tier. The synthetic board has a
   quadratic attention term, so its fit falls back to the table, as the doc anticipates.
@@ -117,9 +137,9 @@ src/deadlinevla/
   policy/  base.py views.py mock.py surrogate.py smolvla.py gr00t.py
   train/   sft.py
   serve/   runtime.py executor.py pilot.py
-  eval/    baselines.py rollout.py metrics.py report.py
+  eval/    baselines.py rollout.py sweep.py metrics.py report.py
   ops/     gates.py
-tests/     69 tests incl. an end-to-end CLI run (pytest, ~20 s)
+tests/     80 tests incl. an end-to-end CLI run (pytest, ~20 s)
 ```
 
 ## Next steps (milestone M0, go / no-go)

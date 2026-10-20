@@ -74,8 +74,25 @@ def measure_braking_details(env: DroneEnv, speeds=(2.0, 4.0, 6.0, 8.0), settle_s
     # Also report the two-parameter fit s = v^2/(2a) + v*t_lag for the record.
     X = np.column_stack([v ** 2 / 2, v])
     (inv_a, t_lag), *_ = np.linalg.lstsq(X, s, rcond=None)
-    return {"a_brake": float(min(r["a_eff"] for r in rows)), "fit_a": float(1 / inv_a) if inv_a > 0 else None,
-            "fit_lag_s": float(t_lag), "runs": rows}
+    return {"a_brake": float(min(r["a_eff"] for r in rows)), "tau_track": measure_tracking_tau(env),
+            "fit_a": float(1 / inv_a) if inv_a > 0 else None, "fit_lag_s": float(t_lag), "runs": rows}
+
+
+def measure_tracking_tau(env: DroneEnv, v_step: float = 0.5, ticks: int = 3) -> float:
+    """Velocity-tracking time constant from a small, unsaturated step command.
+
+    Fits v(t) = v_step (1 - exp(-t / tau)) to the first few control ticks. Braking from speed saturates
+    the actuator and hides this lag; tracking a slowly falling speed cap does not.
+    """
+    dt = 1.0 / env.cfg.drone.ctrl_hz
+    env.reset(empty_scene(altitude=env.cfg.sim.altitude))
+    taus = []
+    for k in range(1, ticks + 1):
+        obs, _ = env.step(np.array([v_step, 0.0, 0.0, 0.0]))
+        frac = float(np.linalg.norm(obs["vel_body"][:2])) / v_step
+        if 0.0 < frac < 0.98:
+            taus.append(-k * dt / np.log(1.0 - frac))
+    return float(np.median(taus)) if taus else 0.0
 
 
 def measure_braking(env: DroneEnv) -> float:

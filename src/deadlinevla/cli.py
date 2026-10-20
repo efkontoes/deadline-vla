@@ -37,14 +37,15 @@ def _has(module: str) -> bool:
 
 def _resolve(cfg: Config, man: Manifest) -> Config:
     """Fill 'measured' fields from earlier stages."""
-    if cfg.drone.a_brake == "measured" and man.has("env-check", "a_brake"):
-        cfg = set_field(cfg, "drone.a_brake", float(man.get("env-check", "a_brake")))
+    for name in ("a_brake", "tau_track"):
+        if getattr(cfg.drone, name) == "measured" and man.has("env-check", name):
+            cfg = set_field(cfg, f"drone.{name}", float(man.get("env-check", name)))
     return cfg
 
 
 def _require_a_brake(cfg: Config, run_dir: Path, man: Manifest) -> Config:
-    if cfg.drone.a_brake == "measured":
-        log("a_brake not measured yet: running env-check first")
+    if "measured" in (cfg.drone.a_brake, cfg.drone.tau_track):
+        log("a_brake / tau_track not measured yet: running env-check first")
         cmd_env_check(cfg, run_dir, man)
         cfg = _resolve(cfg, man)
     return cfg
@@ -87,13 +88,15 @@ def cmd_env_check(cfg: Config, run_dir: Path, man: Manifest) -> None:
     from deadlinevla.sim.drone_env import make_env, measure_braking_details
     from deadlinevla.sim.scenes import build_scene
 
+    cfg = set_field(cfg, "sim.render", True)
     backends = {m: _has(m) for m in ("isaaclab", "torch", "lerobot", "tensorrt", "gr00t")}
     log("backends: " + ", ".join(f"{k}={'yes' if v else 'no'}" for k, v in backends.items()))
     env = make_env(cfg)
     braking = measure_braking_details(env)
     log(f"measured braking deceleration a = {braking['a_brake']:.3f} m/s^2 "
-        f"(fit a={braking['fit_a']}, controller lag {braking['fit_lag_s']:.3f} s)")
-    cfg = set_field(cfg, "drone.a_brake", braking["a_brake"])
+        f"(fit a={braking['fit_a']}, controller lag {braking['fit_lag_s']:.3f} s); "
+        f"velocity-tracking time constant tau = {braking['tau_track']:.3f} s")
+    cfg = set_field(set_field(cfg, "drone.a_brake", braking["a_brake"]), "drone.tau_track", braking["tau_track"])
     env = make_env(cfg)
     obs = env.reset(build_scene(cfg.scenes.families[0], cfg.scenes.seed, cfg))
     n = 20
@@ -103,6 +106,9 @@ def cmd_env_check(cfg: Config, run_dir: Path, man: Manifest) -> None:
     fps = n / (time.perf_counter() - t0)
     log(f"six-camera step rate: {fps:.1f} steps/s at {cfg.tier_res[3]} px (control rate {cfg.drone.ctrl_hz:g} Hz)")
 
+    import matplotlib
+
+    matplotlib.use("Agg")  # never a GUI backend: Tk objects collected from worker threads crash the process
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(1, cfg.cameras.n_cams, figsize=(2 * cfg.cameras.n_cams, 2.2), dpi=120)
@@ -122,7 +128,8 @@ def cmd_env_check(cfg: Config, run_dir: Path, man: Manifest) -> None:
         "jetson_board_available": bool(backends["tensorrt"]),
     }
     log("go / no-go: " + json.dumps(checks))
-    man.record("env-check", a_brake=braking["a_brake"], braking=braking, step_rate=fps, backends=backends,
+    man.record("env-check", a_brake=braking["a_brake"], tau_track=braking["tau_track"], braking=braking,
+               step_rate=fps, backends=backends,
                go_no_go=checks, views="env_check_views.png", backend=cfg.sim.backend)
 
 
@@ -131,7 +138,7 @@ def cmd_record(cfg: Config, run_dir: Path, man: Manifest) -> None:
     from deadlinevla.sim.drone_env import make_env
     from deadlinevla.sim.expert import Expert
 
-    cfg = _require_a_brake(cfg, run_dir, man)
+    cfg = set_field(_require_a_brake(cfg, run_dir, man), "sim.render", True)
     env = make_env(cfg)
     root = run_dir / "dataset"
     log(f"recording {cfg.data.episodes} expert episodes -> {root}")
@@ -199,48 +206,71 @@ def cmd_profile(cfg: Config, run_dir: Path, man: Manifest) -> None:
 def cmd_eval(cfg: Config, run_dir: Path, man: Manifest) -> None:
     from deadlinevla.budget.latency_model import make_latency_source
     from deadlinevla.eval.metrics import summarize
-    from deadlinevla.eval.rollout import build_eval_scenes, run_episodes
-    from deadlinevla.serve.pilot import Pilot
-    from deadlinevla.serve.runtime import SimulatedRuntime
-    from deadlinevla.sim.drone_env import make_env
+    from deadlinevla.eval.rollout import build_eval_scenes
+    from deadlinevla.eval.sweep import run_sweep
 
     cfg = _require_a_brake(cfg, run_dir, man)
-    latency, table = _latency_model(cfg, man)
-    adapter = _load_adapter(cfg, man)
-    # The simulated loop sees the onboard computer's latency, never the desktop's.
+    _, table = _latency_model(cfg, man)
     source = make_latency_source(cfg.serve.board, cfg.tier_tokens, table)
-    env = make_env(cfg)
+    ckpt = man.path_of("train", "checkpoint") if man.has("train", "checkpoint") else None
     scenes = build_eval_scenes(cfg)
     log(f"eval: {len(scenes)} scenes x {len(cfg.eval.methods)} methods x {len(cfg.eval.governor)} governor "
-        f"settings x {len(cfg.eval.speed_caps)} speed caps; latency source {source.name}")
-    results, summary = [], {}
-    with open(run_dir / "episodes.jsonl", "w", encoding="utf-8") as ep_file:
-        for method in cfg.eval.methods:
-            for gov in cfg.eval.governor:
-                all_logs = []
-                for cap in cfg.eval.speed_caps:
-                    rng = np.random.default_rng([cfg.run.seed, int(cap * 100)])
-                    pilot = Pilot(cfg, SimulatedRuntime(adapter, source, rng), latency, method, gov, adapter)
-                    logs = run_episodes(pilot, env, scenes, cap)
-                    all_logs += logs
-                    for lg in logs:
-                        ep_file.write(json.dumps(lg.summary()) + "\n")
-                    m = summarize(logs).to_dict()
-                    results.append({"method": method, "governor": gov, "speed_cap": cap, "family": "all", **m})
-                    for fam in sorted({lg.family for lg in logs}):
-                        fm = summarize([lg for lg in logs if lg.family == fam]).to_dict()
-                        results.append({"method": method, "governor": gov, "speed_cap": cap, "family": fam, **fm})
-                    cpk = m["collisions_per_km"] if m["collisions_per_km"] is not None else float("nan")
-                    log(f"  {method:14s} gov={str(gov):5s} cap={cap:4.1f}  success={m['success_rate']:.2f} "
-                        f"coll/km={cpk:6.2f} "
-                        f"speed={m['mean_speed']:.2f} tokens={m['tokens_per_tick']:.0f} viol={m['violation_rate']:.3f}")
-                summary[f"{method}|{'gov' if gov else 'nogov'}"] = summarize(all_logs).to_dict()
+        f"settings x {len(cfg.eval.speed_caps)} speed caps on {cfg.eval.workers} worker(s); "
+        f"latency source {source.name}{' (SYNTHETIC)' if source.synthetic else ''}")
+    results: list[dict] = []
+    by_method: dict[str, list] = {}
+    ep_file = open(run_dir / "episodes.jsonl", "w", encoding="utf-8")
+
+    def on_cell(cell, logs):
+        method, gov, cap = cell
+        by_method.setdefault(f"{method}|{'gov' if gov else 'nogov'}", []).extend(logs)
+        for lg in logs:
+            ep_file.write(json.dumps(lg.summary()) + "\n")
+        m = summarize(logs).to_dict()
+        results.append({"method": method, "governor": gov, "speed_cap": cap, "family": "all", **m})
+        for fam in sorted({lg.family for lg in logs}):
+            fm = summarize([lg for lg in logs if lg.family == fam]).to_dict()
+            results.append({"method": method, "governor": gov, "speed_cap": cap, "family": fam, **fm})
+        # "static": every family without a moving obstacle. The forward-cone governor can stop for what is
+        # ahead, but not for a threat closing from behind, so the two kinds of failure are reported apart.
+        static = [lg for lg in logs if lg.family != "rear_threat"]
+        if static and len(static) < len(logs):
+            sm = summarize(static).to_dict()
+            results.append({"method": method, "governor": gov, "speed_cap": cap, "family": "static", **sm})
+        cpk = m["collisions_per_km"] if m["collisions_per_km"] is not None else float("nan")
+        log(f"  {method:14s} gov={str(gov):5s} cap={cap:4.1f}  success={m['success_rate']:.2f} "
+            f"coll/km={cpk:6.2f} speed={m['mean_speed']:.2f} tokens={m['tokens_per_tick']:.0f} "
+            f"viol={m['violation_rate']:.3f}")
+
+    try:
+        run_sweep(cfg, scenes, _latency_table_path(cfg, man), ckpt, cfg.eval.workers, on_cell)
+    finally:
+        ep_file.close()
+    summary = {k: summarize(v).to_dict() for k, v in by_method.items()}
+    notes = _duplicate_baseline_check(cfg, by_method)
+    for n in notes:
+        log("WARNING: " + n)
     with open(run_dir / "results.jsonl", "w", encoding="utf-8") as f:
         for r in results:
             f.write(json.dumps(r) + "\n")
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     man.record("eval", results="results.jsonl", summary="summary.json", episodes="episodes.jsonl",
-               latency_source=source.name, synthetic_latency=source.synthetic)
+               latency_source=source.name, synthetic_latency=source.synthetic, scenes=len(scenes), notes=notes)
+
+
+def _duplicate_baseline_check(cfg: Config, by_method: dict[str, list]) -> list[str]:
+    """Flag B3 when it is just B2 in disguise (no usable importance signal from the policy)."""
+    notes = []
+    uniform = np.full(cfg.cameras.n_cams, cfg.eval.uniform_tier)
+    for key, logs in by_method.items():
+        if not key.startswith("importance|") or not logs:
+            continue
+        allocs = np.concatenate([lg.ticks["alloc"] for lg in logs])
+        same = float((allocs == uniform).all(axis=1).mean())
+        if same > 0.95:
+            notes.append(f"{key}: B3 chose the B2 allocation on {same:.0%} of ticks; it is not a distinct baseline "
+                         f"with policy '{cfg.model.policy}'")
+    return notes
 
 
 def cmd_report(cfg: Config, run_dir: Path, man: Manifest) -> int:
@@ -253,9 +283,11 @@ def cmd_report(cfg: Config, run_dir: Path, man: Manifest) -> int:
         notes.append("Latency comes from a SYNTHETIC board model, not a measured Jetson table.")
     if cfg.model.policy in ("mock", "surrogate"):
         notes.append(f"Policy is the '{cfg.model.policy}' stand-in, not a VLA.")
-    path = write_report(results, run_dir / "report", cfg.eval.collision_threshold, notes)
-    log(f"report: {path}")
+    notes += man.get("eval", "notes", [])
     summary = json.loads(man.path_of("eval", "summary").read_text())
+    path = write_report(results, run_dir / "report", cfg.eval.collision_threshold, notes,
+                        synthetic=bool(man.get("eval", "synthetic_latency", False)), summary=summary)
+    log(f"report: {path}")
     ours = summary.get("deadline|gov")
     gate = None
     if ours is not None:

@@ -28,6 +28,7 @@ class _Pending:
     request_tick: int
     chunk: np.ndarray
     latency: float
+    meta: dict
 
 
 class ChunkExecutor:
@@ -45,6 +46,11 @@ class ChunkExecutor:
         self.last_action = np.zeros(self.action_dim)
         self.stalls = 0
         self.last_latency = 0.0
+        # provenance of the action being flown: which inference it came from
+        self.source_request_tick: Optional[int] = None
+        self.source_latency = 0.0
+        self.source_meta: dict = {}
+        self.last_age = 0.0
 
     def _poll(self) -> None:
         """Install a chunk whose inference has finished by the current tick."""
@@ -55,6 +61,7 @@ class ChunkExecutor:
             self.chunk = p.chunk[min(drop, len(p.chunk) - 1):]
             self.k = 0
             self.pending = None
+            self.source_request_tick, self.source_latency, self.source_meta = p.request_tick, p.latency, p.meta
 
     def can_request(self) -> bool:
         self._poll()
@@ -64,12 +71,17 @@ class ChunkExecutor:
             return True
         return self.chunk is None or self.k >= len(self.chunk)
 
-    def request(self, obs: Any, alloc: np.ndarray) -> float:
-        """Start inference on ``obs`` with ``alloc``; returns the sampled/measured latency."""
+    def request(self, obs: Any, alloc: np.ndarray, meta: Optional[dict] = None) -> float:
+        """Start inference on ``obs`` with ``alloc``; returns the sampled/measured latency.
+
+        ``meta`` (e.g. the predicted latency) travels with the chunk and is exposed as ``source_meta``
+        while its actions are flown.
+        """
         chunk = self.runtime.infer(obs, alloc)
         latency = float(self.runtime.timings()["total"])
         delay = max(1, int(math.ceil(latency / self.dt - 1e-9)))
-        self.pending = _Pending(self.tick + delay, self.tick, np.asarray(chunk, dtype=np.float64), latency)
+        self.pending = _Pending(self.tick + delay, self.tick, np.asarray(chunk, dtype=np.float64), latency,
+                                dict(meta or {}))
         self.last_latency = latency
         return latency
 
@@ -85,5 +97,15 @@ class ChunkExecutor:
             a = self.last_action
             stalled = True
             self.stalls += 1
+        req = self.source_request_tick
+        self.last_age = 0.0 if req is None else (self.tick - req) * self.dt
         self.tick += 1
         return np.array(a, dtype=np.float64), stalled
+
+    def information_age(self) -> float:
+        """Seconds between the observation behind the action just flown and now (the real blind time).
+
+        Equals the latency when a chunk's first remaining action is flown and grows while the chunk is
+        played out or its last action is held.
+        """
+        return self.last_age

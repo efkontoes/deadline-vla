@@ -5,6 +5,7 @@ class, and (for ``rear_threat``) one moving obstacle approaching from a side or 
 
 Families
     goal_nav     goals in any direction, including behind the start
+    sparse_nav   goal_nav at a quarter of the clutter: the deadline binds only some of the time
     rear_threat  goal ahead, a moving obstacle crossing in from the rear/side
     slalom       rows of obstacles across the arena with one gap each, forcing fast flight through gaps
 """
@@ -24,7 +25,8 @@ PALETTE: dict[str, tuple[int, int, int]] = {
     "green": (40, 170, 70), "orange": (240, 135, 30), "purple": (150, 60, 190),
 }
 CLASSES = ("backpack", "cone", "box", "barrel", "chair")
-FAMILIES = ("goal_nav", "rear_threat", "slalom")
+FAMILIES = ("goal_nav", "sparse_nav", "rear_threat", "slalom")
+_FAMILY_ID = {"goal_nav": 0, "rear_threat": 1, "slalom": 2, "sparse_nav": 3}  # stable RNG streams
 OBSTACLE_HEIGHT = 6.0
 
 
@@ -100,7 +102,7 @@ def build_scene(family: str, seed: int, cfg: Optional[Config] = None) -> Scene:
         raise ValueError(f"unknown scene family {family!r}; known: {FAMILIES}")
     cfg = cfg or Config()
     sc, sim = cfg.scenes, cfg.sim
-    rng = np.random.default_rng([seed, FAMILIES.index(family)])
+    rng = np.random.default_rng([seed, _FAMILY_ID[family]])
     A = sim.arena
     half = A / 2
     yaw0 = rng.uniform(-math.pi, math.pi)
@@ -108,7 +110,7 @@ def build_scene(family: str, seed: int, cfg: Optional[Config] = None) -> Scene:
 
     for _ in range(100):
         start_xy = rng.uniform(-half / 3, half / 3, size=2)
-        if family == "goal_nav":
+        if family in ("goal_nav", "sparse_nav"):
             bearing = rng.uniform(-math.pi, math.pi)
         elif family == "rear_threat":
             bearing = rng.uniform(-math.pi / 4, math.pi / 4)
@@ -121,7 +123,7 @@ def build_scene(family: str, seed: int, cfg: Optional[Config] = None) -> Scene:
             break
 
     keep = [(start_xy, 1.8), (goal, 1.4)]
-    density = sc.clutter_density * {"goal_nav": 1.0, "rear_threat": 0.6, "slalom": 0.0}[family]
+    density = sc.clutter_density * {"goal_nav": 1.0, "sparse_nav": 0.25, "rear_threat": 0.6, "slalom": 0.0}[family]
     n = int(round(density * A * A))
     xy, r = _scatter(rng, n, A, sc.obstacle_radius, keep)
     meta: dict = {"bearing": bearing}
