@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deadlinevla"
+version = "0.1.0"
+description = "Omnidirectional drone VLA whose per-tick visual-token budget is set by a physical stopping deadline"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Efthymios Kontoes" }]
+dependencies = ["numpy>=1.24", "pyyaml>=6", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+# Real backends. None of these are needed for the light path (numpy sim + mock/surrogate policy).
+torch = ["torch>=2.4"]
+lerobot = ["torch>=2.4", "lerobot[smolvla]>=0.4"]
+trt = ["torch>=2.4", "onnx>=1.16", "tensorrt>=10"]
+# Isaac Lab 3.0 and Isaac-GR00T are installed from NVIDIA's own instructions, not from PyPI here.
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[project.scripts]
+deadlinevla = "deadlinevla.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["UP006", "UP007", "UP035", "UP045", "B905", "B027"]

@@ -1,0 +1,109 @@
+# DeadlineVLA configuration. One section per sub-config; every field can be overridden on the
+# command line as section.field=value. "measured" means the value is filled in by a pipeline stage
+# (env-check for a_brake, profile for latency_table), never typed in by hand.
+
+run:
+  out_dir: runs/default
+  seed: 0
+
+sim:
+  backend: isaac          # isaac (Isaac Lab 3.0) | light (numpy kinematic sim)
+  num_envs: 1
+  physics_hz: 50
+  max_episode_s: 40.0
+  arena: 30.0             # side of the square arena, m
+  altitude: 1.5           # nominal flight altitude, m
+  goal_radius: 1.0
+  max_range: 20.0         # clearance / depth range cap, m
+
+drone:
+  a_brake: measured       # max braking deceleration a, from measure_braking
+  v_max: 8.0              # hard speed cap, m/s
+  margin: 0.5             # safety margin m, m
+  ctrl_hz: 10.0           # rate velocity commands are sent
+  radius: 0.25            # collision radius of the airframe, m
+  tau_vel: 0.1            # velocity-tracking time constant of the controller, s
+  a_max: 9.0              # actuator acceleration limit, m/s^2
+  yaw_rate_max: 2.0       # rad/s
+
+cameras:
+  n_cams: 6
+  cam_yaws: [0, 60, 120, 180, 240, 300]
+  model: pinhole
+  fov: 90.0
+  tiers:                  # tier 1, 2, 3 (tier 0 = off). SmolVLA-like numbers; set at M1.
+    - {res: 128, tokens: 16}
+    - {res: 256, tokens: 64}
+    - {res: 512, tokens: 256}
+
+scenes:
+  families: [goal_nav, rear_threat, slalom]
+  clutter_density: 0.03   # obstacles per m^2
+  seed: 0
+  goal_dist: [8.0, 18.0]
+  obstacle_radius: [0.3, 0.8]
+  threat_speed: 3.0
+
+expert:
+  planner: astar
+  speed_profile: true
+  grid_res: 0.25
+  lookahead: 1.5
+  assumed_latency: 0.1    # L the expert's speed cap assumes
+  cruise_speed: null      # null -> drone.v_max
+
+data:
+  episodes: 200           # grow by learning curve
+  repo_id: local/deadlinevla_demos
+  format: auto            # auto | lerobot | npz
+  val_frac: 0.1
+
+model:
+  policy: smolvla         # smolvla | gr00t_n17 | mock | surrogate
+  pretrained: lerobot/smolvla_base
+  chunk_size: null        # H, from the checkpoint when null
+  num_denoise_steps: null # K, from the checkpoint when null
+  device: cuda
+  hidden: 256             # mock policy only
+  surrogate_ranges: [0.0, 4.0, 8.0, 15.0]   # surrogate policy: detection range per tier, m
+
+train:
+  alloc_sampler: mixed    # uniform | allocator | mixed
+  p_view_off: 0.15
+  lr: 1.0e-4
+  batch_size: 32
+  max_steps: 20000
+  log_every: 50
+
+budget:
+  kappa: 2.0
+  epsilon: 0.05
+  quality_fn: log1p_tokens
+  cone_deg: 30.0
+  clearance_source: oracle   # oracle (v1) | depth (v2)
+  latency_table: measured
+  latency_stat: p95
+  hover_speed: 0.3
+  max_residual: 0.005     # s; worst linear-fit residual above which predict uses the table
+  floor_ignore_z: 0.2     # depth clearance ignores points below this height
+
+serve:
+  mode: async             # sync | async
+  precision: fp16
+  runtime: trt            # trt | torch | simulated
+  board: jetson_orin_nx_16gb
+  profile_iters: 20
+
+eval:
+  methods: [deadline, all_high, uniform_fixed, importance, front_only]
+  governor: [true, false]
+  episodes_per_cell: 10
+  speed_caps: [2.0, 4.0, 6.0, 8.0, 10.0]
+  uniform_tier: 2
+  collision_threshold: 1.0   # collisions per km for the speed-vs-compute plot
+  seed_offset: 10000
+
+gates:
+  max_violation_rate: null   # set after first baseline
+  max_success_drop: 0.05
+  baseline: null             # path to a stored summary.json

@@ -1,0 +1,15 @@
+# Light path with the perception-limited surrogate policy instead of the mock VLA.
+# The surrogate sees an obstacle only if it lies inside an active camera's field of view and within
+# the detection range of that camera's tier, so the allocation genuinely decides what the drone can
+# avoid. It needs no training; use it to study the deadline module before a real VLA exists.
+base: light.yaml
+
+run:
+  out_dir: runs/light_surrogate
+
+model:
+  policy: surrogate
+
+eval:
+  episodes_per_cell: 4
+  speed_caps: [2.0, 4.0, 6.0, 8.0, 10.0]

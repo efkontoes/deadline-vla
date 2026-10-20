@@ -1,0 +1,41 @@
+# Light path: runs the whole pipeline on a laptop CPU. numpy kinematic drone, mock learned policy,
+# simulated Jetson latency. Token counts per tier keep SmolVLA-like values so the latency model is
+# realistic; only the rendered resolution is shrunk.
+base: default.yaml
+
+run:
+  out_dir: runs/light
+
+sim:
+  backend: light
+  max_episode_s: 30.0
+
+cameras:
+  tiers:
+    - {res: 16, tokens: 16}
+    - {res: 32, tokens: 64}
+    - {res: 64, tokens: 256}
+
+data:
+  episodes: 24
+  format: npz
+
+model:
+  policy: mock
+  chunk_size: 5
+  num_denoise_steps: 10
+  device: cpu
+  hidden: 128
+
+train:
+  lr: 1.0e-3
+  batch_size: 64
+  max_steps: 400
+
+serve:
+  runtime: simulated
+  board: synthetic_orin_nx
+
+eval:
+  episodes_per_cell: 2
+  speed_caps: [3.0, 6.0, 9.0]
