@@ -1,8 +1,9 @@
 """Perception-limited surrogate policy for studying the deadline module before a real VLA exists.
 
-It reads ground truth, but only what the allocation would let a camera see: an obstacle is detected
-if it lies inside an active camera's horizontal field of view and within that camera's tier range
-(``model.surrogate_ranges``). It then steers reactively toward the goal (the language goal is
+It reads ground truth, but only what the allocation would let a camera see, through the same
+perception model the governor uses (``deadlinevla.perception``): an obstacle is detected if it lies inside
+an active camera's field of view and within d_det(r, s) = f_px(r) s / p_min. It then steers
+reactively toward the goal (the language goal is
 assumed grounded) around detected obstacles at the cruise speed. Undetected obstacles are invisible,
 so allocation decides what can be avoided, and latency decides how stale the decision is.
 """
@@ -16,6 +17,7 @@ from typing import Any
 import numpy as np
 
 from deadlinevla.config import Config
+from deadlinevla.perception import visible
 from deadlinevla.policy.base import PolicyAdapter, PolicySpec
 
 N_HEADINGS = 72
@@ -30,7 +32,6 @@ class SurrogatePolicy(PolicyAdapter):
         super().__init__(cfg)
         self.H = cfg.model.chunk_size or 5
         self.K = cfg.model.num_denoise_steps or 10
-        self.ranges = np.asarray(cfg.model.surrogate_ranges, dtype=np.float64)
         self.cruise = cfg.drone.v_max
         self.cam_yaws = np.radians(np.asarray(cfg.cameras.cam_yaws, dtype=np.float64))
         self.half_fov = math.radians(cfg.cameras.fov) / 2
@@ -69,19 +70,20 @@ class SurrogatePolicy(PolicyAdapter):
         if len(xy) == 0:
             return xy, r, vel
         rel = xy - pos[:2]
-        dist = np.linalg.norm(rel, axis=1)
-        bearing = np.arctan2(rel[:, 1], rel[:, 0]) - yaw
+        c, s = math.cos(yaw), math.sin(yaw)
+        p_body = rel @ np.array([[c, s], [-s, c]]).T
+        surface = np.linalg.norm(rel, axis=1) - r
         seen = np.zeros(len(xy), dtype=bool)
         imp = np.zeros(len(self.cam_yaws))
-        for j, (cy, tier) in enumerate(zip(self.cam_yaws, alloc)):
+        for j, tier in enumerate(alloc):
             if tier == 0:
                 continue
-            off = (bearing - cy + math.pi) % (2 * math.pi) - math.pi
-            ang_r = np.arcsin(np.clip(r / np.maximum(dist, 1e-6), 0, 1))
-            vis = (np.abs(off) <= self.half_fov + ang_r) & (dist - r <= self.ranges[tier])
+            one = np.zeros(len(alloc), dtype=np.int64)
+            one[j] = tier
+            vis = visible(p_body, 2 * r, surface, one, self.cfg)
             seen |= vis
             # proximity importance (B3's stand-in for attention): near obstacles in view matter most
-            imp[j] = float((1.0 / np.maximum(dist[vis] - r[vis], 0.5)).sum())
+            imp[j] = float((1.0 / np.maximum(surface[vis], 0.5)).sum())
         self._importance = imp + 0.05
         return xy[seen], r[seen], vel[seen]
 

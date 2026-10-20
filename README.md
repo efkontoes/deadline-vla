@@ -63,49 +63,64 @@ Each run directory gets `config.resolved.yaml`.
 | `configs/light_surrogate.yaml` | As light, with the perception-limited `surrogate` policy |
 
 The **surrogate** policy reads ground truth, but only what the allocation lets it see: an obstacle is
-detected if it is inside an active camera's field of view and within that tier's range
-(`model.surrogate_ranges`). It lets the deadline module be studied before a real VLA exists. The
+detected if it is inside an active camera's field of view and within that tier's detection range
+(`perception.py`, shared with the governor). It lets the deadline module be studied before a real VLA exists. The
 **mock** policy is a small numpy MLP that exercises the training contract (variable views, view/tier
 codes, per-sample allocations); it is a plumbing test, not a pilot.
 
-## Light-path results, v3 (synthetic board, surrogate policy)
+## Light-path results, v4 (synthetic board, surrogate policy, camera-coupled governor)
 
 Per cell: 150 static scenes (50 each of goal_nav, sparse_nav, slalom) plus 450 rear_threat scenes (threats at
-up to 10 m/s), every method on identical scenes. Sweep: 6 methods × governor on/off × 5 speed caps =
-36,000 episodes, about 14 min on 4 laptop cores. Reproduce with
-`deadlinevla all --config configs/light_surrogate.yaml`. Headline numbers below are governed, at the 10 m/s
-cap, paired scene by scene against B2 uniform; full tables are in `runs/light_surrogate/report/report.md`.
+up to 10 m/s), every method on identical scenes, governor on. In v4 the governor sees obstacles **only
+through the cameras at their current tier** (detection range f_px(r)·s/p_min), the same perception model the
+policy uses; `perception.governor: oracle` is the upper-bound ablation. Reproduce with
+`deadlinevla all --config configs/light_surrogate.yaml`; compare the modes with
+`deadlinevla compare --run-dir runs/light_surrogate --other runs/light_surrogate_oracle`.
 
-**Headline: equal safety and speed for about a third fewer tokens.**
+**Headline: the efficiency survives coupling.** Governed, 10 m/s cap, paired against B2 uniform:
 
 | | tokens/tick | success | collisions | speed vs B2, paired 95% CI |
 |---|---|---|---|---|
-| static families, deadline (ours) | 247 (−36%) | 1.000 | 0.000 | +0.078 m/s [+0.061, +0.096] |
-| static families, B2 uniform | 384 | 1.000 | 0.000 | (reference, 4.28 m/s) |
-| rear_threat, deadline (ours) | 247 (−36%) | 0.993 | 0.002 | +0.071 m/s [+0.057, +0.086] |
-| rear_threat, B2 uniform | 384 | 0.984 | 0.011 (McNemar p = 0.13 vs ours) | (reference, 4.53 m/s) |
+| static, deadline (ours) | 244 (−36%) | 1.000 | 0.000 | +0.075 m/s [+0.058, +0.091] |
+| static, B2 uniform | 384 | 1.000 | 0.000 | (reference, 4.28 m/s) |
+| static, B4 front-only | 256 (−33%) | 0.693 | **0.307** (p = 3e-14 vs B2) | +0.19 m/s |
+| rear_threat, deadline (ours) | 244 (−36%) | 0.989 | 0.007 | +0.067 m/s [+0.051, +0.084] |
+| rear_threat, B2 uniform | 384 | 0.984 | 0.011 (p = 0.69 vs ours) | (reference, 4.53 m/s) |
+| rear_threat, B4 front-only | 256 | 0.973 | 0.027 | +0.22 m/s |
 
-- The speed gain over B2 is real but small (~2%); the efficiency is the result. On a real Orin, ~36% fewer
-  visual tokens is headroom for a smaller board or a bigger model.
-- **Part of this is by construction.** The surrogate sees an obstacle if an active camera at that tier would,
-  so the link between tokens and perception is something we wrote, not measured. A real VLA may need more
-  tokens to see the same thing. The efficiency number is a hypothesis until M4.
-- v1 (quality objective) and B1 all-high fly ~0.77 m/s slower and succeed less often (88–89%): spending tokens
-  costs speed through the governor.
-- **Relative vs own-motion governor** (`deadlinevla compare`, same scenes): rear_threat collisions fall for
-  every method, e.g. ours 4.0% → 0.2% (p = 1.5e-5), all-high 21% → 1.6%. It is also slightly faster
-  (+0.04 m/s on static scenes, CI above zero), with no static collisions either way.
-- **Confound:** the relative governor works from ground truth (or, in the ablation, from a separate depth
-  sensor), not from the VLA's tokens, so it protects every allocation from behind, front-only included.
-  rear_threat therefore tests the governor, not the allocator; 360° VLA perception has to show its value on
-  the policy side.
-- At the 2 m/s cap, rear-threat collisions rise for every method: a drone capped at 2 m/s cannot outrun a
-  faster threat. This is physics, not a bug.
+**Camera-coupled vs oracle governor**, paired on the same scenes:
 
-All latency here comes from an invented board, so the numbers say nothing yet about an Orin.
+- **Ours: no measurable cost.** Static: identical (0 collisions, speed +0.000 [−0.008, +0.007]). rear_threat:
+  0.7% vs 0.2% collisions (p = 0.5).
+- **Front-only collapses.** Static collisions 0% → 31% (p = 3e-14); rear_threat 0.2% → 2.7% (p = 0.001).
+  Once safety depends on the cameras, the 360° floor (every view at least low) is what keeps ours safe, and
+  front-only's savings stop being free.
+- **Why ours lost nothing:** scene obstacles are 0.6–1.6 m and the threat 1.0 m, so even a low-tier camera
+  detects them at about 5–13 m. That is enough here. A quick check with small threats (s = 0.3 m: low tier
+  sees them at 2.4 m) still gave ours 0/150 collisions, partly because the threat generator often misses the
+  drone. A harder threat generator is needed before the "raise the rear tier" trade-off can show up.
+- Ours still has a closing threat that no camera has detected on 18–33% of ticks, without harm in these scenes.
+
+Caveats that still hold: the surrogate defines how tokens turn into perception (the efficiency number is a
+hypothesis until M4), and all latency is from an invented board.
 
 ![speed vs compute](runs/light_surrogate/report/speed_vs_compute.png)
 ![rear threat](runs/light_surrogate/report/rear_threat.png)
+
+### What changed from v3, and why
+
+| Change | Evidence |
+|---|---|
+| One perception model (`perception.py`) for policy and governor: an obstacle exists only once a camera at its tier detects it (d_det = f_px(r)·s/p_min); oracle governor kept as an ablation | v3's governor saw through a free, perfect 360° sensor, so rear_threat could not reward the allocator |
+| `unseen` metric; relative violations judged against ground truth | Threats the cameras missed must count against the method |
+| `scenes.threat_radius` for small-threat variants | Large obstacles are detected early even at low tier |
+
+### v3 results, oracle governor (kept for the record)
+
+36% fewer tokens than B2 with equal success and safety, +0.078 m/s [+0.061, +0.096] on static scenes. The
+relative governor cut rear_threat collisions for every method versus the own-motion governor (ours 4.0% →
+0.2%, p = 1.5e-5; all-high 21% → 1.6%), but it did so for every allocation, front-only included, because it
+saw through ground truth. That confound is what v4 removes.
 
 ### What changed from v2, and why
 
@@ -156,7 +171,7 @@ All latency here comes from an invented board, so the numbers say nothing yet ab
 
 ```
 src/deadlinevla/
-  config.py manifest.py cli.py
+  config.py manifest.py perception.py cli.py
   sim/     scenes.py drone_env.py light_env.py isaac_env.py expert.py
   data/    record.py dataset.py
   budget/  deadline.py governor.py relative.py latency_model.py allocator.py clearance.py
@@ -165,7 +180,7 @@ src/deadlinevla/
   serve/   runtime.py executor.py pilot.py
   eval/    baselines.py rollout.py sweep.py metrics.py stats.py report.py
   ops/     gates.py
-tests/     89 tests incl. an end-to-end CLI run (pytest, ~40 s)
+tests/     93 tests incl. an end-to-end CLI run (pytest, ~20 s)
 ```
 
 ## Next steps (milestone M0, go / no-go)

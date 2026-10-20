@@ -45,6 +45,7 @@ scenes:
   goal_dist: [8.0, 18.0]
   obstacle_radius: [0.3, 0.8]
   threat_speed: 3.0
+  threat_radius: 0.5      # moving obstacle radius; small threats need higher tiers to be seen in time
 
 expert:
   planner: astar
@@ -67,7 +68,6 @@ model:
   num_denoise_steps: null # K, from the checkpoint when null
   device: cuda
   hidden: 256             # mock policy only
-  surrogate_ranges: [0.0, 4.0, 8.0, 15.0]   # surrogate policy: detection range per tier, m
 
 train:
   alloc_sampler: mixed    # uniform | allocator | mixed
@@ -110,6 +110,12 @@ eval:
   seed_offset: 10000
   workers: 1              # parallel processes for the eval sweep
   family_episodes: {}     # per-family scene count overrides, e.g. {rear_threat: 450}
+
+perception:              # one model for policy and governor: detect if f_px(r) s / d >= p_min
+  tier_width: [0, 128, 256, 512]   # sensor width per tier used for detection (not the rendered size)
+  p_min: 8.0
+  governor: camera        # camera: the governor only sees what the allocation detects | oracle: upper bound
+  nominal_size: 0.5       # assumed obstacle size for depth pseudo-contacts, m
 
 gates:
   max_violation_rate: null   # set after first baseline

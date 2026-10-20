@@ -90,7 +90,22 @@ A static obstacle dead ahead at speed $v$ has $c = v$: the original formula. So 
 - **Governor.** Each on-course contact constrains the command $\mathbf{u}$: $(\mathbf{u} - \mathbf{w}_i)\cdot\hat{\mathbf{r}}_i \le v^*(L_{\text{gov}}, d_i)$. Contacts ahead of the command are met by slowing along it (step 2). Anything else, such as a threat from the side or behind, or one closing faster than braking can fix, is met by removing the offending component, which accelerates the drone away along $-\hat{\mathbf{r}}_i$. Inside the margin only motion away from or tangent to the obstacle is allowed, so the drone slides off instead of deadlocking.
 - **Policy consistency.** A policy should plan passes outside the margin the governor enforces; otherwise every planned pass looks like a collision course. The surrogate's obstacle inflation was raised to radius + margin + 0.15 m for this reason.
 
-**Confound to keep in mind.** The relative governor gets its contacts from ground truth (or, in the ablation, from a separate cheap depth source), not from the VLA's tokens. In the light sweep it removes rear-threat collisions for *every* allocation, front-only included. So `rear_threat` tests the governor design, not the allocator, and 360° *VLA* perception has to prove itself on the policy side (finding goals behind, choosing escape routes) rather than on raw collision avoidance.
+- **Threat rule, principled form (not yet implemented).** The 30° cone is a fixed-width stand-in for a miss-distance threshold that grows with look-ahead, because heading uncertainty spreads with distance: a contact is a threat if $d_{\text{CPA}} \le m + \sigma_\theta\, v\, t_{\text{CPA}}$, with $d_{\text{CPA}}$ the predicted closest distance, $t_{\text{CPA}}$ the time until it, and $\sigma_\theta$ the heading uncertainty per second (rad/s). $\sigma_\theta$ should be measured from the policy's own heading changes.
+
+**Confound to keep in mind (v3).** The relative governor gets its contacts from ground truth (or, in the ablation, from a separate cheap depth source), not from the VLA's tokens. In the light sweep it removes rear-threat collisions for *every* allocation, front-only included. So `rear_threat` tests the governor design, not the allocator, and 360° *VLA* perception has to prove itself on the policy side (finding goals behind, choosing escape routes) rather than on raw collision avoidance.
+
+### 2c. Perception-coupled governor, v4 (`perception.py`, `perception.governor: camera`)
+
+The v3 confound, made into the design: **one perception model for the policy and the governor.** A contact exists for the deadline, the weights and the governor only once some camera, at its current tier, can detect it:
+
+$$f_{\text{px}}(r) = \frac{W(r)}{2\tan(\mathrm{FOV}/2)}, \qquad d_{\det}(r) = \frac{f_{\text{px}}(r)\, s}{p_{\min}}$$
+
+$W(r)$ is the sensor width at tier $r$ (`perception.tier_width`, 128/256/512, deliberately separate from the light config's tiny render sizes), $s$ the obstacle size, $p_{\min}$ the pixels needed to detect it (8). FOV 90°, $s = 0.5$ m: low tier 4 m, high tier 16 m. The detection also needs the obstacle inside that camera's field of view.
+
+- The deadline and the weights use what the allocation *in force* detected. A rear camera at low tier therefore spots a fast threat late, and that is the trade-off the allocator has to make.
+- The governor uses what the current allocation detects.
+- Violations (`rel`) are still judged against ground truth, so threats the cameras missed count against the method. `unseen` reports the share of ticks with a closing threat no camera detected.
+- `perception.governor: oracle` keeps the v3 governor as the upper-bound ablation.
 
 ### 3. Latency model of the onboard computer (`budget/latency_model.py`)
 

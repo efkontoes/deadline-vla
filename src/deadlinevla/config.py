@@ -79,6 +79,7 @@ class ScenesConfig:
     goal_dist: tuple[float, ...] = (8.0, 18.0)
     obstacle_radius: tuple[float, ...] = (0.3, 0.8)
     threat_speed: float = 3.0
+    threat_radius: float = 0.5        # moving obstacle radius, m (small threats are detected late)
 
 
 @dataclass(frozen=True)
@@ -107,7 +108,6 @@ class ModelConfig:
     num_denoise_steps: Optional[int] = None
     device: str = "cuda"
     hidden: int = 256
-    surrogate_ranges: tuple[float, ...] = (0.0, 4.0, 8.0, 15.0)
 
 
 @dataclass(frozen=True)
@@ -161,6 +161,14 @@ class EvalConfig:
 
 
 @dataclass(frozen=True)
+class PerceptionConfig:
+    tier_width: tuple[float, ...] = (0.0, 128.0, 256.0, 512.0)   # sensor width per tier used for detection, px
+    p_min: float = 8.0                # pixels an obstacle must span to be detected
+    governor: str = "camera"          # camera: governor sees only what the allocation detects | oracle: everything
+    nominal_size: float = 0.5         # obstacle size assumed for depth pseudo-contacts, m
+
+
+@dataclass(frozen=True)
 class GatesConfig:
     max_violation_rate: Optional[float] = None
     max_success_drop: float = 0.05
@@ -181,6 +189,7 @@ class Config:
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     serve: ServeConfig = field(default_factory=ServeConfig)
     eval: EvalConfig = field(default_factory=EvalConfig)
+    perception: PerceptionConfig = field(default_factory=PerceptionConfig)
     gates: GatesConfig = field(default_factory=GatesConfig)
 
     # Convenience views used all over the code.
@@ -348,8 +357,10 @@ def validate(cfg: Config) -> None:
         v = getattr(cfg.drone, name)
         if isinstance(v, str) and v != "measured":
             raise ConfigError(f"drone.{name} must be a number or 'measured'")
-    if len(cfg.model.surrogate_ranges) != 4:
-        raise ConfigError("model.surrogate_ranges needs one range per tier 0..3")
+    if len(cfg.perception.tier_width) != 4:
+        raise ConfigError("perception.tier_width needs one width per tier 0..3")
+    if cfg.perception.governor not in ("camera", "oracle"):
+        raise ConfigError("perception.governor must be camera or oracle")
 
 
 def set_field(cfg: Any, dotted: str, value: Any) -> Any:

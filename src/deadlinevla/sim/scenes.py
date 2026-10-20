@@ -162,7 +162,7 @@ def build_scene(family: str, seed: int, cfg: Optional[Config] = None) -> Scene:
         t_arrive = s_aim / 4.0 + 0.5
         speed = float(np.clip(np.linalg.norm(aim - p0) / t_arrive, 2.0, 2.0 * sc.threat_speed))
         vel = (aim - p0) / np.linalg.norm(aim - p0) * speed
-        mover = Mover(p0=p0, vel=vel, r=0.5, t_start=0.5)
+        mover = Mover(p0=p0, vel=vel, r=sc.threat_radius, t_start=0.5)
         meta["mover_speed"] = speed
 
     goal_color = str(rng.choice(list(PALETTE)))
@@ -248,14 +248,14 @@ def obstacle_kinematics(scene: Scene, pos: np.ndarray, vel: np.ndarray, t: float
     """
     xy, r, h = scene.circles(t)
     if len(xy) == 0:
-        return {"p": np.zeros((0, 2)), "R": np.zeros(0), "v_obs": np.zeros((0, 2))}
+        return {"p": np.zeros((0, 2)), "R": np.zeros(0), "v_obs": np.zeros((0, 2)), "size": np.zeros(0)}
     v_obs = np.zeros_like(xy)
     if scene.mover is not None:
         v_obs[-1] = scene.mover.velocity(t)
     rel = xy - pos[:2]
     d = np.linalg.norm(rel, axis=1) - r - radius
     keep = (d <= max_range) & (h + radius >= pos[2])
-    return {"p": rel[keep], "R": r[keep] + radius, "v_obs": v_obs[keep]}
+    return {"p": rel[keep], "R": r[keep] + radius, "v_obs": v_obs[keep], "size": 2 * r[keep]}
 
 
 def collides(scene: Scene, pos: np.ndarray, t: float, radius: float) -> bool:

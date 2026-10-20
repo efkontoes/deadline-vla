@@ -53,6 +53,7 @@ class Contacts:
     p: np.ndarray          # (N, 2) body-frame offset drone -> obstacle centre, m
     R: np.ndarray          # (N,) obstacle radius + airframe radius, m
     w: np.ndarray          # (N, 2) body-frame obstacle velocity, m/s
+    size: Optional[np.ndarray] = None   # (N,) obstacle size s (diameter), for detection
 
     def __post_init__(self):
         self.p = np.asarray(self.p, dtype=np.float64).reshape(-1, 2)
@@ -61,6 +62,11 @@ class Contacts:
         self.dist = np.linalg.norm(self.p, axis=1)
         self.r_hat = self.p / np.maximum(self.dist, 1e-9)[:, None]
         self.d = np.maximum(self.dist - self.R, 0.0)
+        self.size = (np.zeros(len(self.R)) if self.size is None
+                     else np.asarray(self.size, dtype=np.float64).reshape(-1))
+
+    def subset(self, mask: np.ndarray) -> Contacts:
+        return Contacts(p=self.p[mask], R=self.R[mask], w=self.w[mask], size=self.size[mask])
 
     def __len__(self) -> int:
         return len(self.R)
@@ -107,7 +113,7 @@ def contacts_from_kinematics(kin: dict[str, np.ndarray], yaw: float) -> Contacts
     """World-frame ground truth (``scenes.obstacle_kinematics``) to body-frame contacts."""
     c, s = math.cos(yaw), math.sin(yaw)
     rot = np.array([[c, s], [-s, c]])                       # world -> body
-    return Contacts(p=kin["p"] @ rot.T, R=kin["R"], w=kin["v_obs"] @ rot.T)
+    return Contacts(p=kin["p"] @ rot.T, R=kin["R"], w=kin["v_obs"] @ rot.T, size=kin.get("size"))
 
 
 def contacts_from_cameras(d_cam: np.ndarray, c_cam: np.ndarray, cam_axes: np.ndarray,

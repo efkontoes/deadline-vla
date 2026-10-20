@@ -33,6 +33,7 @@ from deadlinevla.budget.relative import (
 )
 from deadlinevla.config import Config, a_brake, set_field, tau_track
 from deadlinevla.eval.baselines import BASELINES, baseline_alloc
+from deadlinevla.perception import visible
 from deadlinevla.policy.base import PolicyAdapter
 from deadlinevla.serve.executor import ChunkExecutor
 from deadlinevla.sim.scenes import obstacle_kinematics
@@ -96,7 +97,15 @@ class Pilot:
             cfg.budget.cone_deg, cfg.drone.radius, cfg.sim.max_range, cfg.budget.floor_ignore_z,
             self._prev_d_cam, cfg.dt)
         self._prev_d_cam = d_cam
-        return contacts_from_cameras(d_cam, c_cam, self.axes, v_body, cfg.sim.max_range)
+        con = contacts_from_cameras(d_cam, c_cam, self.axes, v_body, cfg.sim.max_range)
+        con.size = np.full(len(con), cfg.perception.nominal_size)
+        return con
+
+    def seen(self, con: Contacts, alloc: np.ndarray) -> Contacts:
+        """The contacts some camera detects at its tier under ``alloc`` (all of them for the oracle governor)."""
+        if self.cfg.perception.governor == "oracle":
+            return con
+        return con.subset(visible(con.p, con.size, con.d, alloc, self.cfg))
 
     def tick(self, obs: dict[str, Any], state: Optional[dict[str, Any]] = None) -> np.ndarray:
         cfg, b = self.cfg, self.cfg.budget
@@ -108,9 +117,13 @@ class Pilot:
         weights = None
         if b.relative:
             # v3: every contact's closing speed counts, so a threat from behind tightens the deadline
+            # The deadline and the weights can only use what the cameras detected with the allocation in force
+            # (perception.governor = camera); the oracle ablation sees everything.
             con = self.contacts(obs, v_body)
-            L_max = relative_deadline(con, v_body, self.a, cfg.drone.margin, b.cone_deg)
-            weights = closing_weights(camera_closing(con, v_body, self.axes), b.kappa, b.epsilon, b.hover_speed)
+            con_prev = self.seen(con, self.alloc)
+            L_max = relative_deadline(con_prev, v_body, self.a, cfg.drone.margin, b.cone_deg)
+            weights = closing_weights(camera_closing(con_prev, v_body, self.axes), b.kappa, b.epsilon,
+                                      b.hover_speed)
         else:
             L_max = max_latency(speed, d, self.a, cfg.drone.margin)
         # (3) allocation and (4) inference, whenever the executor can take a request
@@ -132,8 +145,8 @@ class Pilot:
         if not self.use_governor:
             out = cap_speed(action, cfg.drone.v_max)
         elif b.relative:
-            out = govern_relative(action, L_gov, con, self.a, cfg.drone.margin, cfg.drone.v_max, v_now=v_body,
-                                 cone_deg=b.cone_deg)
+            out = govern_relative(action, L_gov, self.seen(con, self.alloc), self.a, cfg.drone.margin,
+                                  cfg.drone.v_max, v_now=v_body, cone_deg=b.cone_deg)
         else:
             out = govern(action, L_gov, d_gov, cfg)
         ex = self.executor
@@ -158,5 +171,9 @@ class Pilot:
         if b.relative:
             # relative-deadline slack with the flown chunk's latency (negative: violated), counted even when
             # the drone is still: a threat closing on a hovering drone is exactly what it must catch
+            # measured against ground truth, so threats the cameras missed show up as violations
             lg["rel_slack"].append(min_slack(con, v_body, ex.source_latency, self.a, cfg.drone.margin, b.cone_deg))
+            closing = (con.closing(v_body) > 1e-6) & con.threat(v_body, cfg.drone.margin, b.cone_deg)
+            lg["unseen_threats"].append(int(closing.sum()) - int((closing & visible(
+                con.p, con.size, con.d, self.alloc, cfg)).sum()) if cfg.perception.governor == "camera" else 0)
         return out

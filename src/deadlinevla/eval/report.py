@@ -269,16 +269,18 @@ def write_report(results: Sequence[dict[str, Any]], out_dir: str | Path, thresho
                   "Rates are per moving tick: `doc` uses clearance along the velocity and the latency of the "
                   "flown inference; `cmd` uses clearance along the command (what the governor judged); `age` "
                   "uses the real information age; `rel` is the v3 relative deadline (any contact closing too fast "
-                  "for its clearance, over all ticks). Causes are fractions of the `doc` violations.", "",
-                  "| method | governor | doc | cmd | age | rel | " + " | ".join(CAUSES) + " |",
-                  "|---|---|---|---|---|---|" + "---|" * len(CAUSES)]
+                  "for its clearance, over all ticks, judged against ground truth); `unseen` is the share of ticks "
+                  "with a closing threat no camera detected at its tier. Causes are fractions of the `doc` "
+                  "violations.", "",
+                  "| method | governor | doc | cmd | age | rel | unseen | " + " | ".join(CAUSES) + " |",
+                  "|---|---|---|---|---|---|---|" + "---|" * len(CAUSES)]
         for key in sorted(summary):
             m = summary[key]
             method, gov = key.split("|")
             causes = m.get("violation_causes", {})
             lines.append(f"| {method} | {gov == 'gov'} | {_fmt(m.get('violation_rate'))} | "
                          f"{_fmt(m.get('violation_rate_cmd'))} | {_fmt(m.get('violation_rate_age'))} | "
-                         f"{_fmt(m.get('violation_rate_rel'))} | "
+                         f"{_fmt(m.get('violation_rate_rel'))} | {_fmt(m.get('unseen_threat_rate'))} | "
                          + " | ".join(_fmt(causes.get(c, 0.0)) for c in CAUSES) + " |")
     lines += ["", "## All cells (all families)", "", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for r in sorted(_overall(results), key=lambda r: (r["method"], not r["governor"], r["speed_cap"])):
