@@ -68,6 +68,35 @@ detected if it is inside an active camera's field of view and within that tier's
 **mock** policy is a small numpy MLP that exercises the training contract (variable views, view/tier
 codes, per-sample allocations); it is a plumbing test, not a pilot.
 
+## Threat grid, v5: the derived floor does not pay off yet (negative result)
+
+`deadlinevla threat-grid --config configs/light_surrogate.yaml` (15 min). A threat now **hunts** the drone:
+every tick it re-aims at the true intercept (smallest positive root of
+(|v_d|² − s_o²) t² + 2(Δ·v_d) t + |Δ|² = 0), for one pass. The grid crosses threat size (0.3/0.6/1.0 m) with
+threat speed (3/6/9 m/s); the small-fast corner has 450 paired scenes and the other cells 150. All runs are
+governed, camera-coupled, with an 8 m/s speed cap. The **derived coverage floor** requires every camera
+to see far enough to survive the worst credible threat from its side, d_det(r_j) ≥ m + τ(r)·c_j^max + (c_j^max)²/2a with
+c_j^max = own motion + o_max. It runs two ways: with the cell's true threat as its envelope ("matched"), and with
+the default 5 m/s, 0.5 m envelope.
+
+![threat grid](runs/light_surrogate/threat_grid/threat_grid.png)
+
+- **The prediction failed.** At 3 and 6 m/s every variant is within noise of the fixed floor (≤ 10% collisions).
+  At 9 m/s, **more perception means more collisions**: all-high 61–65% and matched-derived (which goes all-high)
+  61% at s = 0.3 m, versus fixed floor 34% and front-only 28% (p ≈ 1e-5 to 1e-28, paired McNemar).
+- **Why, measured.** (1) Latency: on a fast board all-high drops from 62% to 48% collisions. Tokens cost
+  reaction time even against a threat. (2) Reaction: even with fast inference, all-high (48%) is far worse than
+  front-only (29%), which never sees the hunter. The surrogate steers around the hunter's predicted position,
+  and the governor flees radially. Against a faster pursuer that re-aims every tick, both are worse than
+  ignoring it. Removing the escape manoeuvre (own-motion governor) makes all-high worse still (72%), so the
+  escape is not the cause; the reaction policy is.
+- **So detection range is not what limits survival here.** Seeing a threat earlier only helps if something can
+  turn the extra time into a miss, e.g. a lateral dodge against a threat with a finite turn rate. Neither the
+  surrogate nor the governor can do that, and an ideal re-aiming hunter with no turn limit cannot be dodged.
+- The derived floor with the default envelope costs ~520 tokens per tick everywhere (vs 240 for the fixed floor)
+  for no measurable benefit. **The fixed floor remains the default allocator for now**; `budget.floor: derived`
+  is implemented, tested and kept for the next iteration.
+
 ## Light-path results, v4 (synthetic board, surrogate policy, camera-coupled governor)
 
 Per cell: 150 static scenes (50 each of goal_nav, sparse_nav, slalom) plus 450 rear_threat scenes (threats at
@@ -178,9 +207,9 @@ src/deadlinevla/
   policy/  base.py views.py mock.py surrogate.py smolvla.py gr00t.py
   train/   sft.py
   serve/   runtime.py executor.py pilot.py
-  eval/    baselines.py rollout.py sweep.py metrics.py stats.py report.py
+  eval/    baselines.py rollout.py sweep.py grid.py metrics.py stats.py report.py
   ops/     gates.py
-tests/     93 tests incl. an end-to-end CLI run (pytest, ~20 s)
+tests/     100 tests incl. an end-to-end CLI run (pytest, ~20 s)
 ```
 
 ## Next steps (milestone M0, go / no-go)

@@ -22,7 +22,7 @@ from deadlinevla.config import Config, load_config, save_resolved, set_field
 from deadlinevla.manifest import Manifest
 
 COMMANDS = ("env-check", "record", "train", "export", "profile", "eval", "report")
-EXTRA = ("compare",)
+EXTRA = ("compare", "threat-grid")
 
 
 def log(msg: str) -> None:
@@ -327,6 +327,21 @@ def cmd_compare(run_a: Path, run_b: Path) -> None:
                 f"{col['a']:.3f} vs {col['ref']:.3f} (p={col['p_mcnemar']:.3g})  {suc['a']:.3f} vs {suc['ref']:.3f}")
 
 
+def cmd_threat_grid(cfg: Config, run_dir: Path, man: Manifest, n_hard: int, n_easy: int) -> None:
+    """Threat size x speed sweep with the intercepting generator (see eval/grid.py)."""
+    from deadlinevla.eval.grid import plot_grid, run_grid
+
+    cfg = _require_a_brake(cfg, run_dir, man)
+    if _latency_table_path(cfg, man) is None:
+        cmd_profile(cfg, run_dir, man)
+    out = run_dir / "threat_grid"
+    rows = run_grid(cfg, _latency_table_path(cfg, man), out, n_hard=n_hard, n_easy=n_easy,
+                    workers=max(1, cfg.eval.workers), log=log)
+    path = plot_grid(rows, out, synthetic=cfg.serve.board.startswith("synthetic"))
+    log(f"threat grid: {path}")
+    man.record("threat-grid", rows=man.rel(out / "grid.jsonl"), figure=man.rel(path))
+
+
 HANDLERS = {"env-check": cmd_env_check, "record": cmd_record, "train": cmd_train, "export": cmd_export,
             "profile": cmd_profile, "eval": cmd_eval, "report": cmd_report}
 
@@ -338,12 +353,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--config", default=None, help="YAML config (default: built-in defaults)")
     ap.add_argument("--run-dir", default=None, help="output folder (default: run.out_dir)")
     ap.add_argument("--other", default=None, help="compare: second run directory (B)")
+    ap.add_argument("--n-hard", type=int, default=450, help="threat-grid: scenes per small-fast cell")
+    ap.add_argument("--n-easy", type=int, default=150, help="threat-grid: scenes per other cell")
     ap.add_argument("overrides", nargs="*", help="section.field=value")
     args = ap.parse_args(argv)
     if args.command == "compare":
         if not (args.run_dir and args.other):
             ap.error("compare needs --run-dir A --other B")
         cmd_compare(Path(args.run_dir), Path(args.other))
+        return 0
+    if args.command == "threat-grid":
+        cfg = load_config(args.config, args.overrides)
+        run_dir = Path(args.run_dir or cfg.run.out_dir)
+        man = Manifest(run_dir)
+        cmd_threat_grid(_resolve(cfg, man), run_dir, man, args.n_hard, args.n_easy)
         return 0
 
     cfg = load_config(args.config, args.overrides)

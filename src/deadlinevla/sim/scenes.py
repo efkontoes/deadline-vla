@@ -32,17 +32,87 @@ OBSTACLE_HEIGHT = 6.0
 
 @dataclass
 class Mover:
+    """A moving obstacle. ``linear``: straight line from p0 with ``vel``. ``intercept``: hunts the drone.
+
+    The intercepting threat re-aims every control tick at the true intercept point computed from the drone's
+    real position and velocity (``steer``). It makes one pass: once it has come within ``lock_range`` and the
+    range starts opening, it locks its heading and flies on. A hunter that turned round forever would make
+    survival impossible for any drone capped below the threat speed, which tests the cap, not perception.
+    """
+
     p0: np.ndarray
     vel: np.ndarray
     r: float
     h: float = OBSTACLE_HEIGHT
     t_start: float = 0.5
+    mode: str = "linear"
+    lock_range: float = 3.0
+
+    def __post_init__(self):
+        self.reset()
+
+    def reset(self) -> None:
+        self._anchor_t = self.t_start
+        self._anchor_p = np.array(self.p0, dtype=np.float64)
+        self._vel = np.array(self.vel, dtype=np.float64)
+        self.locked = False
+        self.came_close = False
+        self.catchable_ticks = 0
+        self.uncatchable_ticks = 0
 
     def pos(self, t: float) -> np.ndarray:
-        return self.p0 + self.vel * max(0.0, t - self.t_start)
+        if t <= self.t_start:
+            return np.array(self.p0, dtype=np.float64)
+        if t <= self._anchor_t:
+            return self._anchor_p.copy()
+        return self._anchor_p + self._vel * (t - self._anchor_t)
 
     def velocity(self, t: float) -> np.ndarray:
-        return self.vel if t >= self.t_start else np.zeros(2)
+        return self._vel.copy() if t >= self.t_start else np.zeros(2)
+
+    def steer(self, t: float, drone_pos: np.ndarray, drone_vel: np.ndarray) -> None:
+        """Re-aim at the intercept (intercept mode only). Called by the env once per control tick."""
+        if self.mode != "intercept" or t < self.t_start or self.locked:
+            return
+        p_o = self.pos(t)
+        delta = np.asarray(drone_pos, dtype=np.float64)[:2] - p_o
+        rng = float(np.linalg.norm(delta))
+        closing = float(delta @ (self._vel - np.asarray(drone_vel, dtype=np.float64)[:2])) > 0
+        if rng < self.lock_range:
+            self.came_close = True
+        if self.came_close and not closing:
+            self.locked = True            # one pass: the range is opening after a near miss
+            return
+        t_hit = intercept_time(delta, np.asarray(drone_vel, dtype=np.float64)[:2], float(np.linalg.norm(self.vel)))
+        speed = float(np.linalg.norm(self.vel))
+        if t_hit is None:
+            self.uncatchable_ticks += 1   # the drone outruns it: keep the current heading
+            return
+        self.catchable_ticks += 1
+        aim = np.asarray(drone_pos, dtype=np.float64)[:2] + np.asarray(drone_vel, dtype=np.float64)[:2] * t_hit
+        direction = aim - p_o
+        n = float(np.linalg.norm(direction))
+        if n > 1e-9:
+            self._anchor_p, self._anchor_t = p_o, t
+            self._vel = direction / n * speed
+
+
+def intercept_time(delta: np.ndarray, v_d: np.ndarray, s_o: float) -> float | None:
+    """Earliest t > 0 with |delta + v_d t| = s_o t, where delta = p_drone - p_obstacle; None if uncatchable.
+
+    (|v_d|^2 - s_o^2) t^2 + 2 (delta . v_d) t + |delta|^2 = 0
+    """
+    A = float(v_d @ v_d) - s_o * s_o
+    B = 2.0 * float(delta @ v_d)
+    C = float(delta @ delta)
+    if abs(A) < 1e-9:
+        return -C / B if B < 0 else None
+    disc = B * B - 4 * A * C
+    if disc < 0:
+        return None
+    sq = math.sqrt(disc)
+    roots = [t for t in ((-B - sq) / (2 * A), (-B + sq) / (2 * A)) if t > 1e-9]
+    return min(roots) if roots else None
 
 
 @dataclass
@@ -160,9 +230,12 @@ def build_scene(family: str, seed: int, cfg: Optional[Config] = None) -> Scene:
         s_aim = rng.uniform(5.0, 8.0)
         aim = start_xy + s_aim * goal_dir
         t_arrive = s_aim / 4.0 + 0.5
-        speed = float(np.clip(np.linalg.norm(aim - p0) / t_arrive, 2.0, 2.0 * sc.threat_speed))
+        if sc.threat_mode == "intercept":
+            speed = sc.threat_speed          # the hunter flies at exactly the configured speed
+        else:
+            speed = float(np.clip(np.linalg.norm(aim - p0) / t_arrive, 2.0, 2.0 * sc.threat_speed))
         vel = (aim - p0) / np.linalg.norm(aim - p0) * speed
-        mover = Mover(p0=p0, vel=vel, r=sc.threat_radius, t_start=0.5)
+        mover = Mover(p0=p0, vel=vel, r=sc.threat_radius, t_start=0.5, mode=sc.threat_mode)
         meta["mover_speed"] = speed
 
     goal_color = str(rng.choice(list(PALETTE)))

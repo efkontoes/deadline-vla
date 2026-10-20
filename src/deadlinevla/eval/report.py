@@ -23,6 +23,7 @@ from matplotlib.figure import Figure  # noqa: E402
 STYLE = {
     "deadline": ("#2a78d6", "o", "deadline (ours)"),
     "deadline_v1": ("#6250d6", "h", "deadline v1 (quality obj.)"),
+    "deadline_fixed": ("#008300", "p", "deadline, fixed floor"),
     "all_high": ("#eb6834", "s", "B1 all high"),
     "uniform_fixed": ("#1baf7a", "^", "B2 uniform"),
     "importance": ("#eda100", "D", "B3 importance"),

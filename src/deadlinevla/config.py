@@ -80,6 +80,7 @@ class ScenesConfig:
     obstacle_radius: tuple[float, ...] = (0.3, 0.8)
     threat_speed: float = 3.0
     threat_radius: float = 0.5        # moving obstacle radius, m (small threats are detected late)
+    threat_mode: str = "linear"       # linear | intercept (re-aims at the drone every tick, one pass)
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,9 @@ class BudgetConfig:
     qmin_mid_weight: float = 0.25     # views with w_j >= this need mid tier in Q_min, the rest low
     governor_delays: bool = True      # governor blind time = L + control period + tracking time constant
     relative: bool = True             # v3: per-contact closing-speed deadline, weights and escape governor
+    floor: str = "fixed"              # fixed: tier >= 1 | derived: per-camera coverage of the worst credible threat
+    o_max: float = 5.0                # assumed bound on threat speed for the derived floor, m/s
+    floor_threat_size: float = 0.5    # assumed smallest threat size for the derived floor, m
 
 
 @dataclass(frozen=True)
@@ -149,7 +153,8 @@ class ServeConfig:
 
 @dataclass(frozen=True)
 class EvalConfig:
-    methods: tuple[str, ...] = ("deadline", "deadline_v1", "all_high", "uniform_fixed", "importance", "front_only")
+    methods: tuple[str, ...] = ("deadline", "deadline_fixed", "deadline_v1", "all_high", "uniform_fixed",
+                                "importance", "front_only")
     governor: tuple[bool, ...] = (True, False)
     episodes_per_cell: int = 10
     speed_caps: tuple[float, ...] = (2.0, 4.0, 6.0, 8.0, 10.0)
@@ -341,6 +346,8 @@ def validate(cfg: Config) -> None:
         raise ConfigError("tier token counts must strictly increase")
     if cfg.sim.backend not in ("isaac", "light"):
         raise ConfigError(f"sim.backend must be isaac or light, got {cfg.sim.backend!r}")
+    if cfg.budget.floor not in ("derived", "fixed"):
+        raise ConfigError("budget.floor must be derived or fixed")
     if cfg.budget.objective not in ("speed", "quality"):
         raise ConfigError("budget.objective must be speed or quality")
     if not cfg.sim.render and cfg.budget.clearance_source == "depth":

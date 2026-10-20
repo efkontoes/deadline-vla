@@ -46,6 +46,7 @@ scenes:
   obstacle_radius: [0.3, 0.8]
   threat_speed: 3.0
   threat_radius: 0.5      # moving obstacle radius; small threats need higher tiers to be seen in time
+  threat_mode: linear     # linear | intercept (hunts the drone: re-aims at the true intercept every tick)
 
 expert:
   planner: astar
@@ -92,6 +93,9 @@ budget:
   qmin_mid_weight: 0.25   # Q_min: views with weight >= this need mid tier, the rest low
   governor_delays: true   # governor blind time = L + control period + tracking time constant
   relative: true          # v3: deadline, weights and governor from every obstacle's closing speed
+  floor: fixed            # fixed: tier >= 1 | derived: every camera sees the worst credible threat in time (v5 grid: no gain yet)
+  o_max: 5.0              # assumed threat-speed bound for the derived floor, m/s
+  floor_threat_size: 0.5  # assumed smallest threat for the derived floor, m
 
 serve:
   mode: async             # sync | async
@@ -101,7 +105,7 @@ serve:
   profile_iters: 20
 
 eval:
-  methods: [deadline, deadline_v1, all_high, uniform_fixed, importance, front_only]
+  methods: [deadline, deadline_fixed, deadline_v1, all_high, uniform_fixed, importance, front_only]
   governor: [true, false]
   episodes_per_cell: 10
   speed_caps: [2.0, 4.0, 6.0, 8.0, 10.0]

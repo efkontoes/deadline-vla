@@ -95,6 +95,8 @@ class LightDroneEnv:
         self.distance = 0.0
         self.done = False
         self.max_t = self.cfg.sim.max_episode_s
+        if scene.mover is not None:
+            scene.mover.reset()   # scenes are reused across methods: the hunter's state must start fresh
         info = self._info(collision=False, goal=False, oob=False)
         return self._obs(info)
 
@@ -104,6 +106,8 @@ class LightDroneEnv:
         d = self.cfg.drone
         v_cmd = np.asarray(v_cmd, dtype=np.float64)
         collision = goal = oob = False
+        if self.scene.mover is not None:
+            self.scene.mover.steer(self.t, self.pos, self.vel)
         for _ in range(self.n_sub):
             cy, sy = math.cos(self.yaw), math.sin(self.yaw)
             target = np.array([cy * v_cmd[0] - sy * v_cmd[1], sy * v_cmd[0] + cy * v_cmd[1], v_cmd[2]])

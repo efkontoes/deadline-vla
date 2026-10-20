@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from deadlinevla.budget.allocator import camera_axes, choose_allocation, quality_table, view_weights
+from deadlinevla.budget.allocator import camera_axes, choose_allocation, coverage_mask, quality_table, view_weights
 from deadlinevla.budget.clearance import estimate_clearance
 from deadlinevla.budget.deadline import max_latency
 from deadlinevla.budget.governor import cap_speed, govern, safe_speed
@@ -33,12 +33,12 @@ from deadlinevla.budget.relative import (
 )
 from deadlinevla.config import Config, a_brake, set_field, tau_track
 from deadlinevla.eval.baselines import BASELINES, baseline_alloc
-from deadlinevla.perception import visible
+from deadlinevla.perception import detection_range, visible
 from deadlinevla.policy.base import PolicyAdapter
 from deadlinevla.serve.executor import ChunkExecutor
 from deadlinevla.sim.scenes import obstacle_kinematics
 
-MODES = ("deadline", "deadline_v1") + BASELINES
+MODES = ("deadline", "deadline_fixed", "deadline_v1") + BASELINES
 
 
 class Pilot:
@@ -53,6 +53,9 @@ class Pilot:
         self.adapter = adapter
         self.a = a_brake(cfg)
         self.tau = tau_track(cfg) if cfg.budget.governor_delays else 0.0
+        self.tau_track = tau_track(cfg)
+        # detection range per tier for the design threat (derived coverage floor)
+        self.det_by_tier = detection_range(np.arange(4), np.full(4, cfg.budget.floor_threat_size), cfg)
         self.axes = camera_axes(cfg.cameras.cam_yaws)
         self.quality = quality_table(cfg.budget.quality_fn, cfg.tier_tokens)
         self.tokens = np.asarray(cfg.tier_tokens)
@@ -75,11 +78,16 @@ class Pilot:
     def choose_alloc(self, v_body: np.ndarray, L_max: float,
                      weights: Optional[np.ndarray] = None) -> tuple[np.ndarray, float]:
         b = self.cfg.budget
-        if self.mode in ("deadline", "deadline_v1"):
+        if self.mode in ("deadline", "deadline_fixed", "deadline_v1"):
             w = weights if weights is not None else view_weights(v_body, self.axes, b.kappa, b.epsilon,
                                                                  b.hover_speed)
-            objective = b.objective if self.mode == "deadline" else "quality"
-            return choose_allocation(w, L_max, self.latency, self.quality, objective, b.qmin_mid_weight)
+            objective = "quality" if self.mode == "deadline_v1" else b.objective
+            floor = None
+            if self.mode == "deadline" and b.floor == "derived":
+                floor = coverage_mask(self.latency.allocs, self.latency.predict_all(), v_body, self.axes,
+                                      self.det_by_tier, b.o_max, self.a, self.cfg.drone.margin,
+                                      self.cfg.dt + self.tau_track)
+            return choose_allocation(w, L_max, self.latency, self.quality, objective, b.qmin_mid_weight, floor)
         imp = self.adapter.view_importance() if self.adapter is not None else None
         alloc = baseline_alloc(self.mode, {"importance": imp}, self.latency, self.cfg)
         return alloc, self.latency.predict(alloc)

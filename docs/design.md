@@ -107,6 +107,18 @@ $W(r)$ is the sensor width at tier $r$ (`perception.tier_width`, 128/256/512, de
 - Violations (`rel`) are still judged against ground truth, so threats the cameras missed count against the method. `unseen` reports the share of ticks with a closing threat no camera detected.
 - `perception.governor: oracle` keeps the v3 governor as the upper-bound ablation.
 
+### 2d. Derived coverage floor and the threat grid, v5 (`budget.floor: derived`, `eval/grid.py`)
+
+**Floor.** Instead of "every view at least low", each camera must see far enough to survive the worst credible threat from its side:
+
+$$c_j^{\max} = \max(0, \mathbf{v}\cdot\mathbf{u}_j) + o_{\max}, \qquad d_{\text{req},j}(\mathbf{r}) = m + \tau(\mathbf{r})\, c_j^{\max} + \frac{(c_j^{\max})^2}{2a}, \qquad d_{\det}(r_j) \ge \min\big(d_{\text{req},j}, d_{\det}(3)\big)$$
+
+with $\tau(\mathbf{r}) = L(\mathbf{r}) + \Delta t + \tau_{\text{track}}$ and $d_{\det}$ for an assumed smallest threat size. The exact search checks it per candidate. Worked example (rear camera, drone still, $o_{\max} = 5$, $\tau = 0.3$ s): $d_{\text{req}} = 3.49$ m; a 1.0 m threat is seen at 8 m by a low-tier camera, but a 0.3 m threat needs mid tier (2.4 m low, 4.8 m mid).
+
+**Threat.** The rear threat can hunt the drone: every tick it re-aims at the true intercept, the smallest positive root of $(\|\mathbf{v}_d\|^2 - s_o^2)t^2 + 2(\boldsymbol{\Delta}\cdot\mathbf{v}_d)t + \|\boldsymbol{\Delta}\|^2 = 0$. It makes one pass (it locks its heading once the range opens after a near miss).
+
+**Result: negative so far.** Over threat size × speed, the derived floor never beat the fixed floor. In the fast column, more perception meant more collisions (all-high 61–65% vs fixed floor 34–45%). Two measured causes: the latency of extra tokens slows every reaction, and seeing a faster, ideally re-aiming hunter only triggers reactions (policy avoidance, radial escape) that are worse than ignoring it. Detection range cannot pay off until something converts early detection into a miss. The next step is a lateral-dodge escape against a threat with a finite turn rate (a real pursuer), after which the grid should be rerun. Until then the fixed floor is the default.
+
 ### 3. Latency model of the onboard computer (`budget/latency_model.py`)
 
 Each camera $j$ gets a resolution tier $r_j \in \{0 = \text{off}, 1 = \text{low}, 2 = \text{mid}, 3 = \text{high}\}$. Measured once per board:

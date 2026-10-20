@@ -84,8 +84,27 @@ def required_quality(weights: np.ndarray, quality_fn: np.ndarray, mid_weight: fl
     return float(quality_fn[req] @ w)
 
 
+def coverage_mask(allocs: np.ndarray, lat_all: np.ndarray, v_body: np.ndarray, cam_axes: np.ndarray,
+                  det_by_tier: np.ndarray, o_max: float, a: float, m: float, extra_blind: float) -> np.ndarray:
+    """Derived floor: can every camera see far enough to survive the worst credible threat from its side?
+
+        c_j^max = max(0, v . u_j) + o_max                     worst closing speed toward camera j
+        d_req,j(r) = m + tau(r) c_j^max + (c_j^max)^2 / 2a    detection distance needed to survive it
+        tau(r) = L(r) + extra_blind                           blind time of this allocation
+        covered  <=>  d_det(r_j) >= min(d_req,j(r), d_det(high))   for every j
+
+    When even the high tier cannot see far enough the camera is required at high and the governor slows
+    the drone, so all-high is always feasible. Returns a mask over ``allocs``.
+    """
+    c_max = np.maximum(0.0, cam_axes[:, :2] @ np.asarray(v_body, dtype=np.float64)[:2]) + o_max   # (V,)
+    tau = np.asarray(lat_all, dtype=np.float64) + extra_blind                                     # (N,)
+    d_req = m + tau[:, None] * c_max[None] + c_max[None] ** 2 / (2 * a)                           # (N, V)
+    det = np.asarray(det_by_tier, dtype=np.float64)
+    return (det[allocs] >= np.minimum(d_req, det[3]) - 1e-9).all(axis=1)
+
+
 def allocate_for_speed(weights: np.ndarray, table: LatencyModel, quality_fn: np.ndarray,
-                       mid_weight: float = 0.25) -> tuple[np.ndarray, float]:
+                       mid_weight: float = 0.25, floor: Optional[np.ndarray] = None) -> tuple[np.ndarray, float]:
     """Method step 5, v2: speed is the objective, perception the constraint.
 
         r* = argmax_r v*(L(r), D)   s.t.   sum_j w_j q(r_j) >= Q_min
@@ -93,15 +112,19 @@ def allocate_for_speed(weights: np.ndarray, table: LatencyModel, quality_fn: np.
     v* falls monotonically with L for every D > 0 (and is 0 for all r when D <= 0), so this is the
     cheapest allocation that still sees enough; D drops out of the argmax. Ties go to higher quality.
 
-    The 360 degree floor (every view at least low) is kept as a hard constraint: with a weighted Q_min
-    alone, the optimiser would switch rear views off and pay for it with a sharper front view, and a
+    The 360 degree floor is a hard constraint. ``floor`` is a mask over allocations: the derived coverage
+    floor (``coverage_mask``), or by default the fixed rule "every view at least low". Without any floor
+    the weighted Q_min alone would switch rear views off and pay for it with a sharper front view, and a
     threat from behind would never reach the model.
     """
     allocs = table.allocs
     lat = table.predict_all()
     w = np.asarray(weights, dtype=np.float64)
     score = quality_fn[allocs] @ w
-    ok = (score >= required_quality(w, quality_fn, mid_weight) - 1e-9) & (allocs >= 1).all(axis=1)
+    fl = (allocs >= 1).all(axis=1) if floor is None else floor
+    ok = (score >= required_quality(w, quality_fn, mid_weight) - 1e-9) & fl
+    if not ok.any():
+        ok = score >= required_quality(w, quality_fn, mid_weight) - 1e-9
     idx = np.flatnonzero(ok)
     cheapest = idx[lat[idx] <= lat[idx].min() + 1e-12]
     i = int(cheapest[np.argmax(score[cheapest])])
@@ -109,10 +132,11 @@ def allocate_for_speed(weights: np.ndarray, table: LatencyModel, quality_fn: np.
 
 
 def choose_allocation(weights: np.ndarray, L_max: float, table: LatencyModel, quality_fn: np.ndarray,
-                      objective: str = "speed", mid_weight: float = 0.25) -> tuple[np.ndarray, float]:
+                      objective: str = "speed", mid_weight: float = 0.25,
+                      floor: Optional[np.ndarray] = None) -> tuple[np.ndarray, float]:
     """Dispatch on ``budget.objective``: ``speed`` (v2) or ``quality`` (v1, the original doc)."""
     if objective == "speed":
-        return allocate_for_speed(weights, table, quality_fn, mid_weight)
+        return allocate_for_speed(weights, table, quality_fn, mid_weight, floor)
     if objective == "quality":
         return allocate(weights, L_max, table, quality_fn)
     raise ValueError(f"unknown allocation objective {objective!r}")

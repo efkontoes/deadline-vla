@@ -118,6 +118,8 @@ class IsaacDroneEnv:  # pragma: no cover - requires Isaac Sim
         if len(scene.obs_xy) + (scene.mover is not None) > MAX_OBSTACLES:
             raise ValueError(f"scene has more than {MAX_OBSTACLES} obstacles")
         self.scene = scene
+        if scene.mover is not None:
+            scene.mover.reset()
         xy, r, h = scene.circles(0.0)
         for i, obj in enumerate(self.obstacles):
             if i < len(xy):
@@ -147,6 +149,9 @@ class IsaacDroneEnv:  # pragma: no cover - requires Isaac Sim
         v_cmd = np.asarray(v_cmd, dtype=np.float64)
         collision = goal = oob = False
         dt = self.sim.get_physics_dt()
+        if self.scene.mover is not None:
+            pos0, vel0, _ = self._pose()
+            self.scene.mover.steer(self.t, pos0, vel0)
         for k in range(self.n_sub):
             pos, vel, yaw = self._pose()
             cy, sy = math.cos(yaw), math.sin(yaw)
