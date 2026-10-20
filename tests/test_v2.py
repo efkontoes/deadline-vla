@@ -107,3 +107,23 @@ def test_parallel_sweep_matches_serial(light_cfg):
     # B3 now follows the surrogate's proximity importance instead of collapsing onto B2
     imp = np.concatenate([lg.ticks["alloc"] for (c, logs) in serial if c[0] == "importance" for lg in logs])
     assert not (imp == 2).all(axis=1).all()
+
+
+def test_paired_stats():
+    from deadlinevla.eval.stats import compare, mcnemar_exact, paired_bootstrap
+
+    assert mcnemar_exact(0, 0) == 1.0
+    assert mcnemar_exact(0, 10) < 0.01
+    assert mcnemar_exact(5, 5) == 1.0
+    m, lo, hi = paired_bootstrap([0.1] * 50)
+    assert m == lo == hi == pytest.approx(0.1)
+    m, lo, hi = paired_bootstrap(np.random.default_rng(0).normal(0, 1, 400))
+    assert lo < 0 < hi
+    eps = []
+    for s in range(20):
+        for meth, speed, coll in (("a", 3.1, s < 2), ("b", 3.0, s < 8)):
+            eps.append({"method": meth, "governor": True, "family": "goal_nav", "seed": s, "speed_cap": 8.0,
+                        "distance": speed * 10, "time": 10.0, "collision": coll, "success": not coll})
+    c = compare(eps, "a", "b")
+    assert c["n"] == 20 and c["speed_diff"] == pytest.approx(0.1)
+    assert c["collision"]["only_ref"] == 6 and c["collision"]["only_a"] == 0

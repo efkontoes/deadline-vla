@@ -10,6 +10,9 @@ run:
 sim:
   render: false           # the surrogate needs no pixels and clearance is the oracle: skip the cameras
 
+scenes:
+  threat_speed: 5.0       # with a margin-respecting surrogate, 3 m/s threats almost never reached the drone
+
 model:
   policy: surrogate
 
@@ -17,3 +20,4 @@ eval:
   episodes_per_cell: 50   # scenes per family, so 200 per (method, governor, cap) cell
   speed_caps: [2.0, 4.0, 6.0, 8.0, 10.0]
   workers: 4
+  family_episodes: {rear_threat: 450}   # ~430 paired scenes resolve 10% vs 5% collisions at 80% power

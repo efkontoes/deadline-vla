@@ -238,6 +238,26 @@ def cone_clearance(scene: Scene, pos: np.ndarray, t: float, v_hat: Optional[np.n
     return float(np.clip(surface[sel].min(), 0.0, max_range))
 
 
+def obstacle_kinematics(scene: Scene, pos: np.ndarray, vel: np.ndarray, t: float, radius: float,
+                        max_range: float) -> dict[str, np.ndarray]:
+    """Ground truth per obstacle whose surface is within ``max_range``: what the relative deadline needs.
+
+    World frame: ``p`` (N, 2) offset from the drone to each obstacle centre, ``R`` (N,) obstacle radius
+    plus the airframe radius, ``v_obs`` (N, 2) obstacle velocity. ``vel`` is accepted for symmetry with
+    the depth path; closing speeds are computed from it by ``budget.relative.Contacts``.
+    """
+    xy, r, h = scene.circles(t)
+    if len(xy) == 0:
+        return {"p": np.zeros((0, 2)), "R": np.zeros(0), "v_obs": np.zeros((0, 2))}
+    v_obs = np.zeros_like(xy)
+    if scene.mover is not None:
+        v_obs[-1] = scene.mover.velocity(t)
+    rel = xy - pos[:2]
+    d = np.linalg.norm(rel, axis=1) - r - radius
+    keep = (d <= max_range) & (h + radius >= pos[2])
+    return {"p": rel[keep], "R": r[keep] + radius, "v_obs": v_obs[keep]}
+
+
 def collides(scene: Scene, pos: np.ndarray, t: float, radius: float) -> bool:
     xy, r, h = scene.circles(t)
     if pos[2] <= 0.05:

@@ -121,7 +121,8 @@ def rear_threat_collisions(results: Sequence[dict[str, Any]], tag: str = "") -> 
     for i, r in enumerate(rows):
         color, marker, label = STYLE.get(r["method"], ("#6250d6", "o", r["method"]))
         lo, hi = r["collision_ci"]
-        ax.errorbar(i, r["collision_rate"], yerr=[[r["collision_rate"] - lo], [hi - r["collision_rate"]]],
+        p = r["collision_rate"]
+        ax.errorbar(i, p, yerr=[[max(p - lo, 0.0)], [max(hi - p, 0.0)]],
                     fmt=marker, color=color, markersize=8, capsize=4, linewidth=1.5, zorder=3)
         ax.annotate(f"{r['tokens_per_tick']:.0f} tok", (i, hi), xytext=(0, 5), textcoords="offset points",
                     ha="center", fontsize=8, color=INK_2)
@@ -177,9 +178,65 @@ def _row(r: dict[str, Any], cols: Sequence[str]) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
+def headline_lines(results: Sequence[dict[str, Any]], episodes: Sequence[dict[str, Any]], ours: str = "deadline",
+                   reference: str = "uniform_fixed") -> list[str]:
+    """Tokens for equal safety and speed: paired comparison of each method against B2 at the top speed cap."""
+    from deadlinevla.eval.stats import compare
+
+    gov = [e for e in episodes if e["governor"]]
+    if not gov or not any(e["method"] == reference for e in gov):
+        return []
+    cap = max(e["speed_cap"] for e in gov)
+    fams = sorted({e["family"] for e in gov})
+    static = [f for f in fams if f != "rear_threat"]
+    tok = {(r["method"], r["governor"]): r["tokens_per_tick"] for r in results
+           if r.get("family") == "all" and r["speed_cap"] == cap}
+
+    def cmp_rows(families):
+        rows = []
+        for m in sorted({e["method"] for e in gov}):
+            c = compare(gov, m, reference, True, families, cap)
+            if c.get("n"):
+                rows.append((m, c))
+        return rows
+
+    lines = ["## Headline: tokens for equal safety and speed", "",
+             f"Governed, speed cap {cap:g} m/s, each method paired scene-by-scene against B2 `{reference}`. Speed "
+             "difference: mean per-scene difference with a 95% paired-bootstrap interval. Event rates: McNemar "
+             "exact p on the discordant pairs.", ""]
+    for title, families in (("Static families (" + ", ".join(static) + ")", static), ("rear_threat", ["rear_threat"])):
+        rows = cmp_rows(families) if families and all(f in fams for f in families) else []
+        if not rows:
+            continue
+        lines += [f"**{title}**", "", "| method | n | tokens/tick (vs B2) | speed m/s | Δspeed vs B2 [95% CI] | "
+                  "success | collision | p (collision) |", "|---|---|---|---|---|---|---|---|"]
+        for m, c in rows:
+            t, t0 = tok.get((m, True)), tok.get((reference, True))
+            tok_s = "-" if t is None else (f"{t:.0f} ({(t / t0 - 1) * 100:+.0f}%)" if t0 else f"{t:.0f}")
+            lo, hi = c["speed_diff_ci"]
+            dv = f"{c['speed_diff']:+.3f} [{lo:+.3f}, {hi:+.3f}]"
+            lines.append(f"| {m} | {c['n']} | {tok_s} | {c['speed_a']:.2f} | {dv} | {c['success']['a']:.3f} | "
+                         f"{c['collision']['a']:.3f} | {c['collision']['p_mcnemar']:.3g} |")
+        lines.append("")
+        if title.startswith("Static") and any(m == ours for m, _ in rows):
+            c = dict(rows)[ours]
+            lo, hi = c["speed_diff_ci"]
+            same = lo <= 0 <= hi
+            t, t0 = tok.get((ours, True)), tok.get((reference, True))
+            if t and t0:
+                sa, sr = c["success"]["a"], c["success"]["ref"]
+                ca, cr = c["collision"]["a"], c["collision"]["ref"]
+                lines += [f"> `{ours}` vs B2 on static scenes: {(1 - t / t0) * 100:.0f}% fewer tokens per tick, "
+                          f"success {sa:.3f} vs {sr:.3f}, collisions {ca:.3f} vs {cr:.3f}, "
+                          f"speed {c['speed_diff']:+.3f} m/s [{lo:+.3f}, {hi:+.3f}]"
+                          f"{' (interval includes zero: equal speed, not faster)' if same else ''}.", ""]
+    return lines
+
+
 def write_report(results: Sequence[dict[str, Any]], out_dir: str | Path, threshold: float,
                  notes: Sequence[str] = (), synthetic: bool = False,
-                 summary: Optional[dict[str, dict[str, Any]]] = None) -> Path:
+                 summary: Optional[dict[str, dict[str, Any]]] = None,
+                 episodes: Sequence[dict[str, Any]] = ()) -> Path:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     tag = "\nSYNTHETIC latency (not a measured board)" if synthetic else ""
@@ -195,6 +252,7 @@ def write_report(results: Sequence[dict[str, Any]], out_dir: str | Path, thresho
             "time_to_goal", "mean_speed", "tokens_per_tick", "violation_rate", "mean_latency", "mean_age"]
     lines = ["# DeadlineVLA evaluation report", ""]
     lines += [f"> {n}" for n in notes] + ([""] if notes else [])
+    lines += headline_lines(results, episodes)
     lines += ["Rates show the Wilson 95% interval in brackets.", "",
               "![speed vs compute](speed_vs_compute.png)", "",
               *(["![rear threat](rear_threat.png)", ""] if (out / "rear_threat.png").exists() else []),
@@ -210,15 +268,17 @@ def write_report(results: Sequence[dict[str, Any]], out_dir: str | Path, thresho
         lines += ["", "## Deadline violations and their causes (all caps pooled)", "",
                   "Rates are per moving tick: `doc` uses clearance along the velocity and the latency of the "
                   "flown inference; `cmd` uses clearance along the command (what the governor judged); `age` "
-                  "uses the real information age. Causes are fractions of the `doc` violations.", "",
-                  "| method | governor | doc | cmd | age | " + " | ".join(CAUSES) + " |",
-                  "|---|---|---|---|---|" + "---|" * len(CAUSES)]
+                  "uses the real information age; `rel` is the v3 relative deadline (any contact closing too fast "
+                  "for its clearance, over all ticks). Causes are fractions of the `doc` violations.", "",
+                  "| method | governor | doc | cmd | age | rel | " + " | ".join(CAUSES) + " |",
+                  "|---|---|---|---|---|---|" + "---|" * len(CAUSES)]
         for key in sorted(summary):
             m = summary[key]
             method, gov = key.split("|")
             causes = m.get("violation_causes", {})
             lines.append(f"| {method} | {gov == 'gov'} | {_fmt(m.get('violation_rate'))} | "
                          f"{_fmt(m.get('violation_rate_cmd'))} | {_fmt(m.get('violation_rate_age'))} | "
+                         f"{_fmt(m.get('violation_rate_rel'))} | "
                          + " | ".join(_fmt(causes.get(c, 0.0)) for c in CAUSES) + " |")
     lines += ["", "## All cells (all families)", "", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for r in sorted(_overall(results), key=lambda r: (r["method"], not r["governor"], r["speed_cap"])):

@@ -68,31 +68,57 @@ detected if it is inside an active camera's field of view and within that tier's
 **mock** policy is a small numpy MLP that exercises the training contract (variable views, view/tier
 codes, per-sample allocations); it is a plumbing test, not a pilot.
 
-## Light-path results, v2 (synthetic board, surrogate policy)
+## Light-path results, v3 (synthetic board, surrogate policy)
 
-200 scenes per cell (50 per family × 4 families), 6 methods × governor on/off × 5 speed caps =
-12,000 episodes; about 2.5 min on 4 laptop cores. Reproduce with
-`deadlinevla all --config configs/light_surrogate.yaml`. Full tables, Wilson intervals and the
-violation-cause breakdown are in `runs/light_surrogate/report/report.md`.
+Per cell: 150 static scenes (50 each of goal_nav, sparse_nav, slalom) plus 450 rear_threat scenes (threats at
+up to 10 m/s), every method on identical scenes. Sweep: 6 methods × governor on/off × 5 speed caps =
+36,000 episodes, about 14 min on 4 laptop cores. Reproduce with
+`deadlinevla all --config configs/light_surrogate.yaml`. Headline numbers below are governed, at the 10 m/s
+cap, paired scene by scene against B2 uniform; full tables are in `runs/light_surrogate/report/report.md`.
+
+**Headline: equal safety and speed for about a third fewer tokens.**
+
+| | tokens/tick | success | collisions | speed vs B2, paired 95% CI |
+|---|---|---|---|---|
+| static families, deadline (ours) | 247 (−36%) | 1.000 | 0.000 | +0.078 m/s [+0.061, +0.096] |
+| static families, B2 uniform | 384 | 1.000 | 0.000 | (reference, 4.28 m/s) |
+| rear_threat, deadline (ours) | 247 (−36%) | 0.993 | 0.002 | +0.071 m/s [+0.057, +0.086] |
+| rear_threat, B2 uniform | 384 | 0.984 | 0.011 (McNemar p = 0.13 vs ours) | (reference, 4.53 m/s) |
+
+- The speed gain over B2 is real but small (~2%); the efficiency is the result. On a real Orin, ~36% fewer
+  visual tokens is headroom for a smaller board or a bigger model.
+- **Part of this is by construction.** The surrogate sees an obstacle if an active camera at that tier would,
+  so the link between tokens and perception is something we wrote, not measured. A real VLA may need more
+  tokens to see the same thing. The efficiency number is a hypothesis until M4.
+- v1 (quality objective) and B1 all-high fly ~0.77 m/s slower and succeed less often (88–89%): spending tokens
+  costs speed through the governor.
+- **Relative vs own-motion governor** (`deadlinevla compare`, same scenes): rear_threat collisions fall for
+  every method, e.g. ours 4.0% → 0.2% (p = 1.5e-5), all-high 21% → 1.6%. It is also slightly faster
+  (+0.04 m/s on static scenes, CI above zero), with no static collisions either way.
+- **Confound:** the relative governor works from ground truth (or, in the ablation, from a separate depth
+  sensor), not from the VLA's tokens, so it protects every allocation from behind, front-only included.
+  rear_threat therefore tests the governor, not the allocator; 360° VLA perception has to show its value on
+  the policy side.
+- At the 2 m/s cap, rear-threat collisions rise for every method: a drone capped at 2 m/s cannot outrun a
+  faster threat. This is physics, not a bug.
+
+All latency here comes from an invented board, so the numbers say nothing yet about an Orin.
 
 ![speed vs compute](runs/light_surrogate/report/speed_vs_compute.png)
 ![rear threat](runs/light_surrogate/report/rear_threat.png)
 
-- **Static families (goal_nav, sparse_nav, slalom), governed: zero collisions in 6,000 episodes.** The v2
-  allocator is the fastest method with 100% success (3.54 m/s at the 10 m/s cap, versus 3.42 for uniform
-  B2) on ~215 tokens per tick, about 45% fewer than B2's 384. B4 front-only is about as fast but succeeds
-  only 88% of the time (goals behind it). v1 and all-high are the slowest (≈2.8 m/s) and time out more.
-- **rear_threat, governed:** every governed collision happens here, because the governor watches only
-  the cone ahead and cannot react to an obstacle closing from behind. v2 collides in 10% of episodes
-  [4–21%], the same as B2/B3; v1 and all-high collide in 22%. With n = 50 the v2-vs-uniform difference
-  is not resolvable.
-- **Governed violation rate: 0.2–1%** (was 19–32% before the governor fixes below), well under the ~5%
-  expected from the p95 latency tail.
-- **Without the governor**, every method crashes in 25–37% of episodes at caps ≥ 8 m/s.
+### What changed from v2, and why
 
-All latency here comes from an invented board, so the numbers say nothing yet about an Orin.
+| Change | Evidence |
+|---|---|
+| Relative deadline per contact (`budget.relative`): L_max,i = (d_i − m − c_i²/2a)/c_i with closing speed c_i; reduces to the original for a static obstacle ahead | In v2, every governed collision was in rear_threat: own-motion reasoning never sees a threat from behind |
+| Closing-speed camera weights | In a static world they equal the old weights; a threat from behind raises the rear weight early |
+| Escape governor: each threat constrains the commanded closing speed; ahead → slow down, otherwise → push away along −r̂; inside the margin, slide but don't approach | A threat from behind can't be braked away from; v2's scaling-only governor had no response to it |
+| Threat = on a collision course **or** inside the 30° cone ahead of velocity or command | Course-only threats let a grazed slalom obstacle become a collision course at 1.8 m and 5 m/s after one heading change (13–19 of 50 slalom runs collided). The cone restores v2's safety ahead |
+| Surrogate passes obstacles outside the governor's margin | Otherwise every planned pass looks like a collision course (goal_nav speed fell to 1.3 m/s) |
+| rear_threat at threat_speed 5 and 450 scenes; paired bootstrap and McNemar; headline section; `deadlinevla compare` | Two-proportion power analysis: ~434 scenes to tell 10% from 5%; speed needs a paired CI before claiming "fastest" |
 
-### What changed from v1, and why
+### What changed from v1 to v2, and why
 
 | Change | Evidence |
 |---|---|
@@ -133,13 +159,13 @@ src/deadlinevla/
   config.py manifest.py cli.py
   sim/     scenes.py drone_env.py light_env.py isaac_env.py expert.py
   data/    record.py dataset.py
-  budget/  deadline.py governor.py latency_model.py allocator.py clearance.py
+  budget/  deadline.py governor.py relative.py latency_model.py allocator.py clearance.py
   policy/  base.py views.py mock.py surrogate.py smolvla.py gr00t.py
   train/   sft.py
   serve/   runtime.py executor.py pilot.py
-  eval/    baselines.py rollout.py sweep.py metrics.py report.py
+  eval/    baselines.py rollout.py sweep.py metrics.py stats.py report.py
   ops/     gates.py
-tests/     80 tests incl. an end-to-end CLI run (pytest, ~20 s)
+tests/     89 tests incl. an end-to-end CLI run (pytest, ~40 s)
 ```
 
 ## Next steps (milestone M0, go / no-go)

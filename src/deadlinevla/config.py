@@ -135,6 +135,7 @@ class BudgetConfig:
     objective: str = "speed"          # speed (v2: cheapest allocation that sees enough) | quality (v1)
     qmin_mid_weight: float = 0.25     # views with w_j >= this need mid tier in Q_min, the rest low
     governor_delays: bool = True      # governor blind time = L + control period + tracking time constant
+    relative: bool = True             # v3: per-contact closing-speed deadline, weights and escape governor
 
 
 @dataclass(frozen=True)
@@ -156,6 +157,7 @@ class EvalConfig:
     collision_threshold: float = 1.0
     seed_offset: int = 10000
     workers: int = 1                  # parallel processes for the eval sweep
+    family_episodes: dict[str, int] = field(default_factory=dict)   # per-family override of episodes_per_cell
 
 
 @dataclass(frozen=True)
@@ -224,6 +226,11 @@ def _coerce(value: Any, hint: Any, where: str) -> Any:
         if not isinstance(value, dict):
             raise ConfigError(f"{where}: expected a mapping, got {value!r}")
         return _build(hint, value, where)
+    if origin is dict:
+        if not isinstance(value, dict):
+            raise ConfigError(f"{where}: expected a mapping, got {value!r}")
+        kt, vt = args if args else (Any, Any)
+        return {_coerce(k, kt, f"{where}.key"): _coerce(v, vt, f"{where}[{k}]") for k, v in value.items()}
     if origin is tuple:
         if not isinstance(value, (list, tuple)):
             raise ConfigError(f"{where}: expected a list, got {value!r}")

@@ -75,6 +75,23 @@ Check with the example: $a = 8, L = 0.125, d - m = 5$ gives $-1 + \sqrt{1 + 80} 
 - *Direction.* $d$ for the governor is $\min(d_{\text{cmd}}, d_{\text{vel}})$ while moving (a turn sweeps from the current velocity to the command), and $d_{\text{cmd}}$ alone at hover speed, so a drone inside the margin can always be commanded away.
 - *Margin.* No "creep" inside the margin: $v^*$ with $m = 0$ allows driving into contact.
 
+### 2b. Relative deadline, v3 (`budget/relative.py`, `budget.relative: true`)
+
+Steps 1–2 only reason about the drone's own motion, so an obstacle closing from behind never enters them. In the v2 sweep every governed collision was in `rear_threat`. v3 makes the deadline relative, per contact (one contact per obstacle from ground truth; one per camera from depth in the ablation).
+
+For contact $i$ with clearance $d_i$ and closing speed $c_i = (\mathbf{v} - \mathbf{w}_i)\cdot\hat{\mathbf{r}}_i$ ($\mathbf{w}_i$ the obstacle's velocity), the drone must cancel $c_i$ before $d_i$ runs out, with acceleration $a$ away from it:
+
+$$L_{\max,i} = \frac{d_i - m - \frac{c_i^2}{2a}}{c_i}, \qquad L_{\max} = \min_i L_{\max,i}$$
+
+A static obstacle dead ahead at speed $v$ has $c = v$: the original formula. So this is a strict generalisation.
+
+- **Collision course.** Only contacts whose straight-line relative motion brings them inside the margin (miss distance $< m$), or that are already inside it, count. A pure "shrinking clearance" definition also brakes for every obstacle the drone flies past (they close at $v\cos\theta$ until passed). In the first v3 run that cut goal_nav speed from 3.4 to 1.3 m/s.
+- **Weights** use closing speed per camera: $c_j = \max(0, \mathbf{v}\cdot\mathbf{u}_j, \max_{i \in j} c_i)$, $w_j = \epsilon + (c_j / \max_k c_k)^\kappa$. In a static world this equals step 4; a threat from behind raises the rear weight before it is close.
+- **Governor.** Each on-course contact constrains the command $\mathbf{u}$: $(\mathbf{u} - \mathbf{w}_i)\cdot\hat{\mathbf{r}}_i \le v^*(L_{\text{gov}}, d_i)$. Contacts ahead of the command are met by slowing along it (step 2). Anything else, such as a threat from the side or behind, or one closing faster than braking can fix, is met by removing the offending component, which accelerates the drone away along $-\hat{\mathbf{r}}_i$. Inside the margin only motion away from or tangent to the obstacle is allowed, so the drone slides off instead of deadlocking.
+- **Policy consistency.** A policy should plan passes outside the margin the governor enforces; otherwise every planned pass looks like a collision course. The surrogate's obstacle inflation was raised to radius + margin + 0.15 m for this reason.
+
+**Confound to keep in mind.** The relative governor gets its contacts from ground truth (or, in the ablation, from a separate cheap depth source), not from the VLA's tokens. In the light sweep it removes rear-threat collisions for *every* allocation, front-only included. So `rear_threat` tests the governor design, not the allocator, and 360° *VLA* perception has to prove itself on the policy side (finding goals behind, choosing escape routes) rather than on raw collision avoidance.
+
 ### 3. Latency model of the onboard computer (`budget/latency_model.py`)
 
 Each camera $j$ gets a resolution tier $r_j \in \{0 = \text{off}, 1 = \text{low}, 2 = \text{mid}, 3 = \text{high}\}$. Measured once per board:

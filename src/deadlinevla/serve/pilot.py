@@ -20,10 +20,22 @@ from deadlinevla.budget.clearance import estimate_clearance
 from deadlinevla.budget.deadline import max_latency
 from deadlinevla.budget.governor import cap_speed, govern, safe_speed
 from deadlinevla.budget.latency_model import LatencyModel
+from deadlinevla.budget.relative import (
+    Contacts,
+    camera_closing,
+    closing_weights,
+    contacts_from_cameras,
+    contacts_from_kinematics,
+    depth_camera_clearances,
+    govern_relative,
+    min_slack,
+    relative_deadline,
+)
 from deadlinevla.config import Config, a_brake, set_field, tau_track
 from deadlinevla.eval.baselines import BASELINES, baseline_alloc
 from deadlinevla.policy.base import PolicyAdapter
 from deadlinevla.serve.executor import ChunkExecutor
+from deadlinevla.sim.scenes import obstacle_kinematics
 
 MODES = ("deadline", "deadline_v1") + BASELINES
 
@@ -56,44 +68,74 @@ class Pilot:
         self.alloc = np.zeros(self.cfg.cameras.n_cams, dtype=np.int64)
         self.L_pred = 0.0
         self.L_act = 0.0
+        self._prev_d_cam: Optional[np.ndarray] = None
         self.log: dict[str, list] = defaultdict(list)
 
-    def choose_alloc(self, v_body: np.ndarray, L_max: float) -> tuple[np.ndarray, float]:
+    def choose_alloc(self, v_body: np.ndarray, L_max: float,
+                     weights: Optional[np.ndarray] = None) -> tuple[np.ndarray, float]:
         b = self.cfg.budget
         if self.mode in ("deadline", "deadline_v1"):
-            w = view_weights(v_body, self.axes, b.kappa, b.epsilon, b.hover_speed)
+            w = weights if weights is not None else view_weights(v_body, self.axes, b.kappa, b.epsilon,
+                                                                 b.hover_speed)
             objective = b.objective if self.mode == "deadline" else "quality"
             return choose_allocation(w, L_max, self.latency, self.quality, objective, b.qmin_mid_weight)
         imp = self.adapter.view_importance() if self.adapter is not None else None
         alloc = baseline_alloc(self.mode, {"importance": imp}, self.latency, self.cfg)
         return alloc, self.latency.predict(alloc)
 
-    def tick(self, obs: dict[str, Any], state: Optional[dict[str, Any]] = None) -> np.ndarray:
+    def contacts(self, obs: dict[str, Any], v_body: np.ndarray) -> Contacts:
+        """Everything whose clearance can shrink: ground truth per obstacle, or per camera from depth."""
         cfg = self.cfg
+        priv = obs.get("privileged")
+        if cfg.budget.clearance_source == "oracle" and priv is not None:
+            kin = obstacle_kinematics(priv["scene"], priv["pos"], priv["vel"], priv["time"], cfg.drone.radius,
+                                      cfg.sim.max_range)
+            return contacts_from_kinematics(kin, priv["yaw"])
+        d_cam, c_cam = depth_camera_clearances(
+            np.asarray(obs["depth"]), float(obs["state"][6]), cfg.cameras.fov, cfg.cameras.cam_yaws,
+            cfg.budget.cone_deg, cfg.drone.radius, cfg.sim.max_range, cfg.budget.floor_ignore_z,
+            self._prev_d_cam, cfg.dt)
+        self._prev_d_cam = d_cam
+        return contacts_from_cameras(d_cam, c_cam, self.axes, v_body, cfg.sim.max_range)
+
+    def tick(self, obs: dict[str, Any], state: Optional[dict[str, Any]] = None) -> np.ndarray:
+        cfg, b = self.cfg, self.cfg.budget
         v_body = np.asarray(obs["vel_body"], dtype=np.float64)
         speed = float(np.linalg.norm(v_body))
-        v_hat = v_body / speed if speed >= cfg.budget.hover_speed else None
+        v_hat = v_body / speed if speed >= b.hover_speed else None
         # (1) clearance and (2) deadline, before any pixel reaches the model
         d = estimate_clearance(obs, v_hat, cfg)
-        L_max = max_latency(speed, d, self.a, cfg.drone.margin)
+        weights = None
+        if b.relative:
+            # v3: every contact's closing speed counts, so a threat from behind tightens the deadline
+            con = self.contacts(obs, v_body)
+            L_max = relative_deadline(con, v_body, self.a, cfg.drone.margin, b.cone_deg)
+            weights = closing_weights(camera_closing(con, v_body, self.axes), b.kappa, b.epsilon, b.hover_speed)
+        else:
+            L_max = max_latency(speed, d, self.a, cfg.drone.margin)
         # (3) allocation and (4) inference, whenever the executor can take a request
         requested = self.executor.can_request()
         if requested:
-            self.alloc, self.L_pred = self.choose_alloc(v_body, L_max)
+            self.alloc, self.L_pred = self.choose_alloc(v_body, L_max, weights)
             self.L_act = self.executor.request(obs, self.alloc, {"L_pred": self.L_pred})
-        # (5) next action, governed with the latency of the allocation actually chosen and the
-        # clearance in the direction the command would take the drone (so it can always back away)
+        # (5) next action, governed with the latency of the allocation actually chosen
         action, stalled = self.executor.next_action()
         n = float(np.linalg.norm(action[:3]))
-        d_cmd = estimate_clearance(obs, action[:3] / n, cfg) if n >= cfg.budget.hover_speed else d
+        d_cmd = estimate_clearance(obs, action[:3] / n, cfg) if n >= b.hover_speed else d
         # The governor acts once per control period and the controller tracks its command with a lag, so
         # its blind time is L + dt + tau_track: with L alone, v* falls faster than the drone sheds speed.
-        L_gov = self.L_pred + (cfg.dt + self.tau if cfg.budget.governor_delays else 0.0)
+        L_gov = self.L_pred + (cfg.dt + self.tau if b.governor_delays else 0.0)
         # While moving, a turn sweeps from the current velocity to the command, so both directions must be
         # safe. At hover speed only the command counts, so a drone inside the margin can still back away.
         d_gov = d_cmd if v_hat is None else min(d_cmd, d)
         v_star = min(safe_speed(L_gov, d_gov, self.a, cfg.drone.margin), cfg.drone.v_max)
-        out = govern(action, L_gov, d_gov, cfg) if self.use_governor else cap_speed(action, cfg.drone.v_max)
+        if not self.use_governor:
+            out = cap_speed(action, cfg.drone.v_max)
+        elif b.relative:
+            out = govern_relative(action, L_gov, con, self.a, cfg.drone.margin, cfg.drone.v_max, v_now=v_body,
+                                 cone_deg=b.cone_deg)
+        else:
+            out = govern(action, L_gov, d_gov, cfg)
         ex = self.executor
 
         lg = self.log
@@ -113,4 +155,8 @@ class Pilot:
         lg["stalled"].append(stalled)
         lg["v_cmd"].append(float(np.linalg.norm(action[:3])))
         lg["v_gov"].append(float(np.linalg.norm(out[:3])))
+        if b.relative:
+            # relative-deadline slack with the flown chunk's latency (negative: violated), counted even when
+            # the drone is still: a threat closing on a hovering drone is exactly what it must catch
+            lg["rel_slack"].append(min_slack(con, v_body, ex.source_latency, self.a, cfg.drone.margin, b.cone_deg))
         return out

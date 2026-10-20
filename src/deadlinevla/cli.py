@@ -22,6 +22,7 @@ from deadlinevla.config import Config, load_config, save_resolved, set_field
 from deadlinevla.manifest import Manifest
 
 COMMANDS = ("env-check", "record", "train", "export", "profile", "eval", "report")
+EXTRA = ("compare",)
 
 
 def log(msg: str) -> None:
@@ -285,8 +286,10 @@ def cmd_report(cfg: Config, run_dir: Path, man: Manifest) -> int:
         notes.append(f"Policy is the '{cfg.model.policy}' stand-in, not a VLA.")
     notes += man.get("eval", "notes", [])
     summary = json.loads(man.path_of("eval", "summary").read_text())
+    episodes = [json.loads(line) for line in man.path_of("eval", "episodes").read_text().splitlines() if line]
     path = write_report(results, run_dir / "report", cfg.eval.collision_threshold, notes,
-                        synthetic=bool(man.get("eval", "synthetic_latency", False)), summary=summary)
+                        synthetic=bool(man.get("eval", "synthetic_latency", False)), summary=summary,
+                        episodes=episodes)
     log(f"report: {path}")
     ours = summary.get("deadline|gov")
     gate = None
@@ -301,6 +304,29 @@ def cmd_report(cfg: Config, run_dir: Path, man: Manifest) -> int:
     return 0 if gate is None or gate.passed else 1
 
 
+def cmd_compare(run_a: Path, run_b: Path) -> None:
+    """Paired ablation table: the same methods and scenes in two run directories (A minus B)."""
+    from deadlinevla.eval.stats import compare_runs
+
+    load = lambda d: [json.loads(x) for x in (Path(d) / "episodes.jsonl").read_text().splitlines() if x]  # noqa: E731
+    ea, eb = load(run_a), load(run_b)
+    cap = max(e["speed_cap"] for e in ea)
+    fams = sorted({e["family"] for e in ea})
+    groups = [("static", [f for f in fams if f != "rear_threat"])] + ([("rear_threat", ["rear_threat"])]
+                                                                       if "rear_threat" in fams else [])
+    log(f"A = {run_a}   B = {run_b}   governed, cap {cap:g} m/s, paired by scene")
+    for name, families in groups:
+        log(f"\n{name}: method | n | speed A-B [95% CI] | collision A vs B (p McNemar) | success A vs B")
+        for m in sorted({e["method"] for e in ea}):
+            c = compare_runs(ea, eb, m, True, families, cap)
+            if not c.get("n"):
+                continue
+            lo, hi = c["speed_diff_ci"]
+            col, suc = c["collision"], c["success"]
+            log(f"  {m:14s} {c['n']:4d}  {c['speed_diff']:+.3f} [{lo:+.3f}, {hi:+.3f}]  "
+                f"{col['a']:.3f} vs {col['ref']:.3f} (p={col['p_mcnemar']:.3g})  {suc['a']:.3f} vs {suc['ref']:.3f}")
+
+
 HANDLERS = {"env-check": cmd_env_check, "record": cmd_record, "train": cmd_train, "export": cmd_export,
             "profile": cmd_profile, "eval": cmd_eval, "report": cmd_report}
 
@@ -308,11 +334,17 @@ HANDLERS = {"env-check": cmd_env_check, "record": cmd_record, "train": cmd_train
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(prog="deadlinevla", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=COMMANDS + ("all",))
+    ap.add_argument("command", choices=COMMANDS + ("all",) + EXTRA)
     ap.add_argument("--config", default=None, help="YAML config (default: built-in defaults)")
     ap.add_argument("--run-dir", default=None, help="output folder (default: run.out_dir)")
+    ap.add_argument("--other", default=None, help="compare: second run directory (B)")
     ap.add_argument("overrides", nargs="*", help="section.field=value")
     args = ap.parse_args(argv)
+    if args.command == "compare":
+        if not (args.run_dir and args.other):
+            ap.error("compare needs --run-dir A --other B")
+        cmd_compare(Path(args.run_dir), Path(args.other))
+        return 0
 
     cfg = load_config(args.config, args.overrides)
     run_dir = Path(args.run_dir or cfg.run.out_dir)

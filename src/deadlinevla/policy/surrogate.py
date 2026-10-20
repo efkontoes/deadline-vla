@@ -97,7 +97,8 @@ class SurrogatePolicy(PolicyAdapter):
 
         # predict movers half a second ahead, inflate everything by airframe + margin
         xy = xy + vel * 0.5
-        infl = r + cfg.drone.radius + cfg.drone.margin * 0.6
+        # pass obstacles outside the margin the governor enforces, or every pass looks like a collision course
+        infl = r + cfg.drone.radius + cfg.drone.margin + 0.15
         heads = np.linspace(-math.pi, math.pi, N_HEADINGS, endpoint=False)
         d = np.stack([np.cos(heads), np.sin(heads)], 1)
         free = np.full(N_HEADINGS, 50.0)       # free ray length along each heading

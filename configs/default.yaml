@@ -91,6 +91,7 @@ budget:
   objective: speed        # speed: cheapest allocation meeting Q_min (v2) | quality: max quality s.t. L <= L_max (v1)
   qmin_mid_weight: 0.25   # Q_min: views with weight >= this need mid tier, the rest low
   governor_delays: true   # governor blind time = L + control period + tracking time constant
+  relative: true          # v3: deadline, weights and governor from every obstacle's closing speed
 
 serve:
   mode: async             # sync | async
@@ -108,6 +109,7 @@ eval:
   collision_threshold: 1.0   # collisions per km for the speed-vs-compute plot
   seed_offset: 10000
   workers: 1              # parallel processes for the eval sweep
+  family_episodes: {}     # per-family scene count overrides, e.g. {rear_threat: 450}
 
 gates:
   max_violation_rate: null   # set after first baseline

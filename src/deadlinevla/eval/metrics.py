@@ -60,6 +60,7 @@ class Metrics:
     violation_rate: float        # doc definition, over moving ticks
     violation_rate_cmd: float    # same inequality with clearance along the command (what the governor sees)
     violation_rate_age: float    # same inequality with the real information age instead of the latency
+    violation_rate_rel: float    # v3 relative deadline over all ticks: some contact's closing speed too high
     violation_causes: dict = field(default_factory=dict)   # cause -> fraction of violating ticks
     mean_latency: float = 0.0    # s, actual, per request
     mean_age: float = 0.0        # s, information age of flown actions
@@ -146,6 +147,8 @@ def summarize(logs: Sequence[EpisodeLog]) -> Metrics:
         violation_rate=float(viol.sum() / n_mov),
         violation_rate_cmd=float(viol_cmd.sum() / n_mov),
         violation_rate_age=float(viol_age.sum() / n_mov),
+        violation_rate_rel=float(np.mean(np.concatenate([lg.ticks["rel_slack"] < 0 for lg in logs])))
+        if all("rel_slack" in lg.ticks for lg in logs) else float("nan"),
         violation_causes=breakdown,
         mean_latency=float(lat.mean()) if len(lat) else 0.0,
         mean_age=float(cat("age")[moving].mean()) if moving.any() else 0.0,

@@ -45,7 +45,7 @@ def build_eval_scenes(cfg: Config, families: Optional[Sequence[str]] = None,
     inflate = cfg.drone.radius + cfg.drone.margin + 0.2
     for fam in families or cfg.scenes.families:
         seed, got = cfg.eval.seed_offset, 0
-        while got < (per_family or cfg.eval.episodes_per_cell):
+        while got < (per_family or cfg.eval.family_episodes.get(fam, cfg.eval.episodes_per_cell)):
             sc = build_scene(fam, seed, cfg)
             seed += 1
             if plan_path(sc, sc.start[:2], sc.goal_xy, cfg.expert.grid_res, inflate) is not None:
