@@ -214,10 +214,15 @@ tests/     100 tests incl. an end-to-end CLI run (pytest, ~20 s)
 
 ## Next steps (milestone M0, go / no-go)
 
-1. Isaac Lab 3.0: run `deadlinevla env-check` with `sim.backend=isaac`; fix `sim/isaac_env.py` against the installed API.
-2. SmolVLA: load `lerobot/smolvla_base` through `policy/smolvla.py` with views dropped and tiers mixed.
-3. Jetson: `export` + `profile` with `serve.runtime=trt`, then set `serve.board` to the board name so eval replays its table.
-4. Novelty sweep (Risks) before M1.
+The laptop simulator is **frozen at `a2754eb`**; hypotheses and success criteria for the real stack are in
+[docs/preregistration.md](docs/preregistration.md) (draft: sign it before any confirmatory run). The M0
+runbook, with commands and go/no-go criteria, is [docs/m0.md](docs/m0.md):
+
+1. Isaac Lab 3.0 renders six cameras at the control rate (on A100: the Newton/Warp kit-less renderer).
+2. SmolVLA takes six views with mixed and dropped tiers: `scripts/m0_smolvla_views.py`.
+3. The fine-tuning path runs: `train.alloc_sampler=constant`, then `mixed`.
+4. **A Jetson Orin NX or AGX Orin. Start this first: it has the longest lead time, and without it the 36%
+   stays synthetic.**
 
 ## Licenses
 

@@ -119,6 +119,8 @@ def sample_alloc(cfg: Config, rng: np.random.Generator, latency: Optional[Latenc
     """
     V = cfg.cameras.n_cams
     mode = cfg.train.alloc_sampler
+    if mode == "constant":   # every view at one tier, no views off: checks the plain training path (M0)
+        return np.full(V, cfg.train.constant_tier, dtype=np.int64)
     if mode == "mixed":
         mode = "uniform" if rng.random() < 0.5 else "allocator"
     if mode == "uniform":

@@ -71,7 +71,8 @@ model:
   hidden: 256             # mock policy only
 
 train:
-  alloc_sampler: mixed    # uniform | allocator | mixed
+  alloc_sampler: mixed    # uniform | allocator | mixed | constant (every view at constant_tier)
+  constant_tier: 3
   p_view_off: 0.15
   lr: 1.0e-4
   batch_size: 32

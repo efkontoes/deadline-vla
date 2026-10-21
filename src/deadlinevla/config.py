@@ -114,6 +114,7 @@ class ModelConfig:
 @dataclass(frozen=True)
 class TrainConfig:
     alloc_sampler: str = "mixed"
+    constant_tier: int = 3            # tier for every view when alloc_sampler = constant (M0 check 3)
     p_view_off: float = 0.15
     lr: float = 1e-4
     batch_size: int = 32
@@ -358,8 +359,8 @@ def validate(cfg: Config) -> None:
         raise ConfigError("budget.clearance_source must be oracle or depth")
     if cfg.serve.mode not in ("sync", "async"):
         raise ConfigError("serve.mode must be sync or async")
-    if cfg.train.alloc_sampler not in ("uniform", "allocator", "mixed"):
-        raise ConfigError("train.alloc_sampler must be uniform, allocator or mixed")
+    if cfg.train.alloc_sampler not in ("uniform", "allocator", "mixed", "constant"):
+        raise ConfigError("train.alloc_sampler must be uniform, allocator, mixed or constant")
     for name in ("a_brake", "tau_track"):
         v = getattr(cfg.drone, name)
         if isinstance(v, str) and v != "measured":
