@@ -18,6 +18,7 @@ torch = ["torch>=2.4"]
 lerobot = ["torch>=2.4", "lerobot[smolvla]>=0.4"]
 trt = ["torch>=2.4", "onnx>=1.16", "tensorrt>=10"]
 # Isaac Lab 3.0 and Isaac-GR00T are installed from NVIDIA's own instructions, not from PyPI here.
+viz = ["manim>=0.19"]   # method explainer animation (PyAV comes with it)
 dev = ["pytest>=7", "ruff>=0.4"]
 
 [project.scripts]

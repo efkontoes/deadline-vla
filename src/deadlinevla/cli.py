@@ -22,7 +22,7 @@ from deadlinevla.config import Config, load_config, save_resolved, set_field
 from deadlinevla.manifest import Manifest
 
 COMMANDS = ("env-check", "record", "train", "export", "profile", "eval", "report")
-EXTRA = ("compare", "threat-grid")
+EXTRA = ("compare", "threat-grid", "animate")
 
 
 def log(msg: str) -> None:
@@ -355,12 +355,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--other", default=None, help="compare: second run directory (B)")
     ap.add_argument("--n-hard", type=int, default=450, help="threat-grid: scenes per small-fast cell")
     ap.add_argument("--n-easy", type=int, default=150, help="threat-grid: scenes per other cell")
+    ap.add_argument("--out", default="docs/media", help="animate: where the GIFs go")
     ap.add_argument("overrides", nargs="*", help="section.field=value")
     args = ap.parse_args(argv)
     if args.command == "compare":
         if not (args.run_dir and args.other):
             ap.error("compare needs --run-dir A --other B")
         cmd_compare(Path(args.run_dir), Path(args.other))
+        return 0
+    if args.command == "animate":
+        from deadlinevla.viz.gifs import build_replays
+
+        cfg = load_config(args.config, args.overrides)
+        run_dir = Path(args.run_dir or cfg.run.out_dir)
+        grid = _resolve(cfg, Manifest(run_dir)) if (run_dir / "threat_grid" / "grid.jsonl").exists() else None
+        for p in build_replays(run_dir, Path(args.out), grid, log=log):
+            log(f"wrote {p}")
         return 0
     if args.command == "threat-grid":
         cfg = load_config(args.config, args.overrides)

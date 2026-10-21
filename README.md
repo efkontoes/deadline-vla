@@ -1,9 +1,15 @@
 # DeadlineVLA
 
-Omnidirectional drone VLA under a physical latency deadline. Six cameras cover 360°; every control
-tick, the drone's speed and clearance set a latency deadline, the deadline sets a visual-token budget,
-the budget is spent mostly in the direction of travel, and a governor slows the drone when no budget
-is safe. Full design: [docs/design.md](docs/design.md).
+Omnidirectional drone VLA under a physical latency deadline. Six cameras cover 360°. Every control tick,
+the allocator picks the cheapest split of visual tokens across the cameras that still sees enough: sharp in
+the direction of travel (or toward anything closing in), low elsewhere. The governor then turns that
+allocation's latency, the drone's speed and its clearance into the fastest speed it may safely fly, using
+the stopping-deadline physics. Full design: [docs/design.md](docs/design.md).
+
+![method explainer](docs/media/explainer.gif)
+
+*Every number in this animation is computed live by the project's allocator and governor (synthetic latency
+table of the light run). Made with Manim CE: `scripts/manim_explainer.py`.*
 
 ```
 clearance d ─┐
@@ -53,6 +59,15 @@ deadlinevla eval      --config configs/light.yaml   # methods x governor x speed
 deadlinevla report    --config configs/light.yaml   # figures, report.md, gates (exit 1 if a gate fails)
 ```
 
+Animations (GIFs land in `docs/media/`):
+
+```bash
+deadlinevla animate --config configs/light_surrogate.yaml --run-dir runs/light_surrogate   # episode replays
+pip install -e .[viz]                                                                       # Manim CE
+manim -ql -r 640,360 --fps 10 scripts/manim_explainer.py DeadlineExplainer                  # explainer (MP4)
+python -m deadlinevla.viz.encode media/videos/manim_explainer/360p10/DeadlineExplainer.mp4 docs/media/explainer.gif
+```
+
 Any field can be overridden: `deadlinevla eval --config configs/light.yaml drone.margin=0.8 "eval.speed_caps=[4, 8]"`.
 Each run directory gets `config.resolved.yaml`.
 
@@ -80,6 +95,12 @@ c_j^max = own motion + o_max. It runs two ways: with the cell's true threat as i
 the default 5 m/s, 0.5 m envelope.
 
 ![threat grid](runs/light_surrogate/threat_grid/threat_grid.png)
+
+![hunter replay](docs/media/replay_hunter.gif)
+
+*One replayed scene from the 0.3 m / 9 m/s cell, picked by a fixed rule (the first scene where all-high is
+caught and the others are not), with the cell's totals in the footer. The replay re-flies the whole cell and
+must reproduce the grid's collision rates exactly before it is drawn.*
 
 - **The prediction failed.** At 3 and 6 m/s every variant is within noise of the fixed floor (≤ 10% collisions).
   At 9 m/s, **more perception means more collisions**: all-high 61–65% and matched-derived (which goes all-high)
@@ -132,6 +153,16 @@ policy uses; `perception.governor: oracle` is the upper-bound ablation. Reproduc
 
 Caveats that still hold: the surrogate defines how tokens turn into perception (the efficiency number is a
 hypothesis until M4), and all latency is from an invented board.
+
+![static replay](docs/media/replay_static.gif)
+
+![rear replay](docs/media/replay_rear.gif)
+
+*Replays of real evaluation episodes, same scene for all three allocators. Wedges are camera views, coloured
+by tier, with length equal to the detection range for a 0.5 m object; dark obstacles are the ones the
+cameras currently detect. Scenes are chosen by a fixed rule (the first scene where front-only collides and
+ours reaches the goal) and every replay is checked against `episodes.jsonl` before it is drawn. The footers
+give the totals over all scenes, which are the evidence; a single replay is an illustration.*
 
 ![speed vs compute](runs/light_surrogate/report/speed_vs_compute.png)
 ![rear threat](runs/light_surrogate/report/rear_threat.png)
@@ -209,7 +240,8 @@ src/deadlinevla/
   serve/   runtime.py executor.py pilot.py
   eval/    baselines.py rollout.py sweep.py grid.py metrics.py stats.py report.py
   ops/     gates.py
-tests/     100 tests incl. an end-to-end CLI run (pytest, ~20 s)
+  viz/     replay.py gifs.py encode.py   (episode replays, GIF encoding)
+tests/     103 tests incl. an end-to-end CLI run (pytest, ~30 s)
 ```
 
 ## Next steps (milestone M0, go / no-go)
