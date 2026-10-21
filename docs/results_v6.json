@@ -1,0 +1,368 @@
+{
+  "P1": {
+    "n": 150,
+    "tokens_v6": 117.10859988507949,
+    "tokens_v4": 240.3921034717495,
+    "collision_diff": {
+      "mean": 0.0,
+      "ci": [
+        0.0,
+        0.0
+      ]
+    },
+    "success_diff": {
+      "mean": 0.0,
+      "ci": [
+        0.0,
+        0.0
+      ]
+    },
+    "collision_v6": 0.0,
+    "collision_v4": 0.0,
+    "success_v6": 1.0,
+    "success_v4": 1.0,
+    "p_noninf": 0.0,
+    "pass": true,
+    "pass_holm": true
+  },
+  "P2a": {
+    "caps": [
+      6.0,
+      9.0,
+      12.0,
+      15.0
+    ],
+    "tokens_v6": [
+      122.99736316420295,
+      144.58494623655915,
+      149.8961038961039,
+      149.41589119541877
+    ],
+    "pass": false
+  },
+  "P2b": {
+    "n": 150,
+    "collision_v6": 0.0,
+    "collision_v4": 0.0,
+    "only_v6": 0,
+    "only_v4": 0,
+    "p": 1.0,
+    "pass_raw": false,
+    "pass_holm": false
+  },
+  "P2c": {
+    "tokens_v6": 149.41589119541877,
+    "tokens_v4": 219.03881317923063,
+    "pass": false
+  },
+  "P3": {
+    "n": 450,
+    "collision_v6": 0.0022222222222222222,
+    "collision_v4": 0.006666666666666667,
+    "collision_diff": {
+      "mean": -0.0044444444444444444,
+      "ci": [
+        -0.011111111111111112,
+        0.0
+      ]
+    },
+    "p_noninf": 0.0,
+    "pass": true,
+    "pass_holm": true
+  },
+  "holm": {
+    "P1": 0.0,
+    "P2b": 1.0,
+    "P3": 0.0
+  },
+  "highspeed": {
+    "deadline": {
+      "6.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 4.9590822904644405,
+        "tokens_per_tick": 122.99736316420295,
+        "time_to_goal": 8.303066666666579
+      },
+      "9.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 5.586079317625951,
+        "tokens_per_tick": 144.58494623655915,
+        "time_to_goal": 7.3981333333332655
+      },
+      "12.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 5.62483394722776,
+        "tokens_per_tick": 149.8961038961039,
+        "time_to_goal": 7.349466666666597
+      },
+      "15.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 5.60197088935398,
+        "tokens_per_tick": 149.41589119541877,
+        "time_to_goal": 7.405999999999928
+      }
+    },
+    "deadline_v4": {
+      "6.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 4.847263286703668,
+        "tokens_per_tick": 217.48778027775623,
+        "time_to_goal": 8.548799999999906
+      },
+      "9.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 5.4364116411735095,
+        "tokens_per_tick": 219.1268263162445,
+        "time_to_goal": 7.669333333333258
+      },
+      "12.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 0.9933333333333333,
+        "mean_speed": 5.372028638424962,
+        "tokens_per_tick": 218.52738336713995,
+        "time_to_goal": 7.630067114093884
+      },
+      "15.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 5.45404105743487,
+        "tokens_per_tick": 219.03881317923063,
+        "time_to_goal": 7.68746666666659
+      }
+    },
+    "uniform_fixed": {
+      "6.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 4.744533780162521,
+        "tokens_per_tick": 384.0,
+        "time_to_goal": 8.726666666666569
+      },
+      "9.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 5.236857033572391,
+        "tokens_per_tick": 384.0,
+        "time_to_goal": 7.987066666666585
+      },
+      "12.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 5.305952481877069,
+        "tokens_per_tick": 384.0,
+        "time_to_goal": 7.8769333333332545
+      },
+      "15.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 1.0,
+        "mean_speed": 5.327016053226178,
+        "tokens_per_tick": 384.0,
+        "time_to_goal": 7.83079999999992
+      }
+    },
+    "all_high": {
+      "6.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 0.8533333333333334,
+        "mean_speed": 4.036585754344696,
+        "tokens_per_tick": 1536.0,
+        "time_to_goal": 11.159531249999855
+      },
+      "9.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 0.7733333333333333,
+        "mean_speed": 4.4091065885123335,
+        "tokens_per_tick": 1536.0,
+        "time_to_goal": 10.099310344827458
+      },
+      "12.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 0.7333333333333333,
+        "mean_speed": 4.433916072914566,
+        "tokens_per_tick": 1536.0,
+        "time_to_goal": 10.456545454545322
+      },
+      "15.0": {
+        "collision_rate": 0.0,
+        "collision_ci": [
+          0.0,
+          0.02497113914571871
+        ],
+        "success_rate": 0.6933333333333334,
+        "mean_speed": 4.441822768128524,
+        "tokens_per_tick": 1536.0,
+        "time_to_goal": 10.554615384615252
+      }
+    },
+    "front_only": {
+      "6.0": {
+        "collision_rate": 0.02,
+        "collision_ci": [
+          0.006824627715648315,
+          0.05714766586424165
+        ],
+        "success_rate": 0.98,
+        "mean_speed": 4.902863594235229,
+        "tokens_per_tick": 256.0,
+        "time_to_goal": 8.401224489795826
+      },
+      "9.0": {
+        "collision_rate": 0.02,
+        "collision_ci": [
+          0.006824627715648315,
+          0.05714766586424165
+        ],
+        "success_rate": 0.98,
+        "mean_speed": 5.54999317975841,
+        "tokens_per_tick": 256.0,
+        "time_to_goal": 7.414829931972718
+      },
+      "12.0": {
+        "collision_rate": 0.013333333333333334,
+        "collision_ci": [
+          0.0036640523882232115,
+          0.047307856380276334
+        ],
+        "success_rate": 0.9866666666666667,
+        "mean_speed": 5.596668160982071,
+        "tokens_per_tick": 256.0,
+        "time_to_goal": 7.422972972972902
+      },
+      "15.0": {
+        "collision_rate": 0.02,
+        "collision_ci": [
+          0.006824627715648315,
+          0.05714766586424165
+        ],
+        "success_rate": 0.98,
+        "mean_speed": 5.590499819023553,
+        "tokens_per_tick": 256.0,
+        "time_to_goal": 7.390612244897889
+      }
+    }
+  },
+  "S1": {
+    "6.0": {
+      "collision_rate": 0.0,
+      "success_rate": 1.0,
+      "mean_speed": 4.947726588905702,
+      "tokens_per_tick": 170.98139017019247
+    },
+    "9.0": {
+      "collision_rate": 0.0,
+      "success_rate": 1.0,
+      "mean_speed": 5.522518517203838,
+      "tokens_per_tick": 301.25376287298656
+    },
+    "12.0": {
+      "collision_rate": 0.0,
+      "success_rate": 1.0,
+      "mean_speed": 5.561331931582074,
+      "tokens_per_tick": 303.9815668202765
+    },
+    "15.0": {
+      "collision_rate": 0.0,
+      "success_rate": 1.0,
+      "mean_speed": 5.560182890596329,
+      "tokens_per_tick": 303.62839985870716
+    }
+  },
+  "static_cap10": {
+    "deadline": {
+      "collision_rate": 0.0,
+      "success_rate": 1.0,
+      "mean_speed": 4.2722499731759935,
+      "tokens_per_tick": 117.10859988507949
+    },
+    "deadline_v4": {
+      "collision_rate": 0.0,
+      "success_rate": 1.0,
+      "mean_speed": 3.991079729042124,
+      "tokens_per_tick": 240.3921034717495
+    },
+    "uniform_fixed": {
+      "collision_rate": 0.0,
+      "success_rate": 1.0,
+      "mean_speed": 3.911648551427036,
+      "tokens_per_tick": 384.0
+    },
+    "all_high": {
+      "collision_rate": 0.0,
+      "success_rate": 0.88,
+      "mean_speed": 3.226709830848215,
+      "tokens_per_tick": 1536.0
+    },
+    "front_only": {
+      "collision_rate": 0.30666666666666664,
+      "success_rate": 0.6933333333333334,
+      "mean_speed": 4.113881167191634,
+      "tokens_per_tick": 256.0
+    }
+  }
+}

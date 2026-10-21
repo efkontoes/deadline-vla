@@ -1,0 +1,93 @@
+{
+  "stages": {
+    "env-check": {
+      "a_brake": 8.426958683908243,
+      "tau_track": 0.089628402354491,
+      "braking": {
+        "a_brake": 8.426958683908243,
+        "tau_track": 0.089628402354491,
+        "fit_a": 9.232619251896994,
+        "fit_lag_s": 0.005253202310768915,
+        "runs": [
+          {
+            "v": 1.9999999999999898,
+            "stop_dist": 0.23733354760823655,
+            "a_eff": 8.426958683908243
+          },
+          {
+            "v": 3.9999999999998774,
+            "stop_dist": 0.883830905713225,
+            "a_eff": 9.0515051558915
+          },
+          {
+            "v": 5.9999999999985345,
+            "stop_dist": 1.975824461583933,
+            "a_eff": 9.110121040591523
+          },
+          {
+            "v": 7.999999999982502,
+            "stop_dist": 3.51126213022167,
+            "a_eff": 9.11353206142995
+          }
+        ]
+      },
+      "step_rate": 69.31935670260278,
+      "backends": {
+        "isaaclab": false,
+        "torch": false,
+        "lerobot": false,
+        "tensorrt": false,
+        "gr00t": false
+      },
+      "go_no_go": {
+        "six_cameras_render_at_control_rate": true,
+        "smolvla_variable_views": null,
+        "jetson_board_available": false
+      },
+      "views": "env_check_views.png",
+      "backend": "light",
+      "finished": "2026-10-21T13:52:20"
+    },
+    "profile": {
+      "latency_table": "latency_table.npz",
+      "fit": {
+        "source": "table",
+        "intercept": 0.04581931667312819,
+        "per_view": [
+          0.009264439172321906,
+          0.023269000093795955,
+          0.07467805865466101
+        ],
+        "worst_residual": 0.17878601956785156,
+        "rms_residual": 0.018105355472816716,
+        "stat": "p95",
+        "e": [
+          0.006018488429886907,
+          0.011997521815825935,
+          0.03007774707555077
+        ],
+        "c": 0.0001425449909569404,
+        "L0": 0.010125204372686776,
+        "head": 0.030052021337990432,
+        "board": "synthetic_orin_nx",
+        "synthetic": true
+      },
+      "finished": "2026-10-21T13:52:23"
+    },
+    "eval": {
+      "results": "results.jsonl",
+      "summary": "summary.json",
+      "episodes": "episodes.jsonl",
+      "latency_source": "synthetic_orin_nx",
+      "synthetic_latency": true,
+      "scenes": 150,
+      "notes": [],
+      "finished": "2026-10-21T13:54:56"
+    },
+    "report": {
+      "report": "report/report.md",
+      "gates_passed": true,
+      "finished": "2026-10-21T13:54:58"
+    }
+  }
+}

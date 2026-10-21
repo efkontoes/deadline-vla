@@ -1,0 +1,140 @@
+run:
+  out_dir: runs/light_highspeed
+  seed: 0
+sim:
+  backend: light
+  num_envs: 1
+  physics_hz: 50
+  max_episode_s: 40.0
+  arena: 80.0
+  altitude: 1.5
+  goal_radius: 1.0
+  max_range: 20.0
+  render: false
+drone:
+  a_brake: 8.426958683908243
+  tau_track: 0.089628402354491
+  v_max: 8.0
+  margin: 0.5
+  ctrl_hz: 10.0
+  radius: 0.25
+  tau_vel: 0.1
+  a_max: 9.0
+  yaw_rate_max: 2.0
+cameras:
+  n_cams: 6
+  cam_yaws:
+  - 0.0
+  - 60.0
+  - 120.0
+  - 180.0
+  - 240.0
+  - 300.0
+  model: pinhole
+  fov: 90.0
+  tiers:
+  - res: 16
+    tokens: 16
+  - res: 32
+    tokens: 64
+  - res: 64
+    tokens: 256
+scenes:
+  families:
+  - highspeed
+  clutter_density: 0.03
+  seed: 0
+  goal_dist:
+  - 35.0
+  - 55.0
+  obstacle_radius:
+  - 0.3
+  - 0.8
+  threat_speed: 5.0
+  threat_radius: 0.5
+  threat_mode: linear
+expert:
+  planner: astar
+  speed_profile: true
+  grid_res: 0.25
+  lookahead: 1.5
+  assumed_latency: 0.1
+  cruise_speed: null
+data:
+  episodes: 24
+  repo_id: local/deadlinevla_demos
+  format: npz
+  val_frac: 0.1
+model:
+  policy: surrogate
+  pretrained: lerobot/smolvla_base
+  chunk_size: 5
+  num_denoise_steps: 10
+  device: cpu
+  hidden: 128
+train:
+  alloc_sampler: mixed
+  constant_tier: 3
+  p_view_off: 0.15
+  lr: 0.001
+  batch_size: 64
+  max_steps: 400
+  log_every: 50
+budget:
+  kappa: 2.0
+  epsilon: 0.05
+  quality_fn: log1p_tokens
+  cone_deg: 30.0
+  clearance_source: oracle
+  latency_table: measured
+  latency_stat: p95
+  hover_speed: 0.3
+  max_residual: 0.005
+  floor_ignore_z: 0.2
+  objective: coverage
+  qmin_mid_weight: 0.25
+  governor_delays: true
+  relative: true
+  floor: fixed
+  o_max: 5.0
+  floor_threat_size: 0.5
+serve:
+  mode: async
+  precision: fp16
+  runtime: simulated
+  board: synthetic_orin_nx
+  profile_iters: 20
+eval:
+  methods:
+  - deadline
+  - deadline_v4
+  - uniform_fixed
+  - all_high
+  - front_only
+  governor:
+  - true
+  episodes_per_cell: 150
+  speed_caps:
+  - 6.0
+  - 9.0
+  - 12.0
+  - 15.0
+  uniform_tier: 2
+  collision_threshold: 1.0
+  seed_offset: 10000
+  workers: 4
+  family_episodes:
+    rear_threat: 450
+perception:
+  tier_width:
+  - 0.0
+  - 128.0
+  - 256.0
+  - 512.0
+  p_min: 8.0
+  governor: camera
+  nominal_size: 0.5
+gates:
+  max_violation_rate: null
+  max_success_drop: 0.05
+  baseline: null

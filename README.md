@@ -83,6 +83,32 @@ detected if it is inside an active camera's field of view and within that tier's
 **mock** policy is a small numpy MLP that exercises the training contract (variable views, view/tier
 codes, per-sample allocations); it is a plumbing test, not a pilot.
 
+## v6: coverage allocation (requirements in metres), pre-registered
+
+The v4 allocator weighted cameras by a ratio of speeds, which is scale-free, so its allocation could not
+depend on speed. v6 deletes the weights: every direction, and every detected contact, must be seen by some
+camera far enough to cancel its closing speed, m + τ(r)·c + c²/2a, and the allocator takes the lowest-latency
+allocation that does (design.md, "4–5 (v6)"). The spec and five predictions were committed (`006411b`)
+before any v6 code or run. Full scoring: [docs/results_v6.md](docs/results_v6.md).
+
+| Prediction | Verdict |
+|---|---|
+| P1: on the v4 families, fewer tokens than v4 with equal safety and success | **held**: 117 vs 240 tokens/tick, 0% collisions and 100% success for both (150 paired scenes) |
+| P2a: tokens rise with the speed cap (highspeed family) | **failed**: 123 → 145 → 150 → 149 |
+| P2b: fewer collisions than v4 at 15 m/s | **failed**: 0% vs 0% (nothing collided) |
+| P2c: more tokens than v4 at 15 m/s | **failed**: 149 vs 219 |
+| P3: not worse than v4 on rear_threat | **held**: 0.2% vs 0.7% collisions (450 paired scenes) |
+
+Why P2 failed: the high-speed family did not produce high speeds. Even at a 15 m/s cap the drone flew above
+9 m/s on only ~5% of ticks, so the caps rarely bound and nothing collided. It was not re-tuned and re-run
+(that needs a new pre-registered amendment). Exploratory, tick level: v6's tokens do climb with the speed
+actually flown (96 below 4 m/s, 166 at 6–8, 267 at 8–10, 474 above 10 m/s, front camera at high in every
+tick above 10 m/s), while v4 stays flat at ~210.
+
+![high-speed results](docs/media/highspeed.png)
+
+![tokens by speed](docs/media/tokens_by_speed.png)
+
 ## Threat grid, v5: the derived floor does not pay off yet (negative result)
 
 `deadlinevla threat-grid --config configs/light_surrogate.yaml` (15 min). A threat now **hunts** the drone:

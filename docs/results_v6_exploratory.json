@@ -1,0 +1,78 @@
+{
+  "deadline": [
+    {
+      "bin": "0-2",
+      "ticks": 709,
+      "tokens": 96.0,
+      "front_high": 0.0
+    },
+    {
+      "bin": "2-4",
+      "ticks": 2131,
+      "tokens": 96.0,
+      "front_high": 0.0
+    },
+    {
+      "bin": "4-6",
+      "ticks": 3178,
+      "tokens": 108.52108244178729,
+      "front_high": 0.0
+    },
+    {
+      "bin": "6-8",
+      "ticks": 3406,
+      "tokens": 165.51967116852612,
+      "front_high": 0.0
+    },
+    {
+      "bin": "8-10",
+      "ticks": 1648,
+      "tokens": 266.56310679611653,
+      "front_high": 0.3592233009708738
+    },
+    {
+      "bin": "10-14",
+      "ticks": 104,
+      "tokens": 474.0,
+      "front_high": 1.0
+    }
+  ],
+  "deadline_v4": [
+    {
+      "bin": "0-2",
+      "ticks": 984,
+      "tokens": 318.9756097560976,
+      "front_high": 0.0
+    },
+    {
+      "bin": "2-4",
+      "ticks": 2398,
+      "tokens": 215.09924937447875,
+      "front_high": 0.0
+    },
+    {
+      "bin": "4-6",
+      "ticks": 3003,
+      "tokens": 209.77422577422578,
+      "front_high": 0.0
+    },
+    {
+      "bin": "6-8",
+      "ticks": 3345,
+      "tokens": 207.7847533632287,
+      "front_high": 0.0
+    },
+    {
+      "bin": "8-10",
+      "ticks": 1707,
+      "tokens": 206.62214411247803,
+      "front_high": 0.0
+    },
+    {
+      "bin": "10-14",
+      "ticks": 157,
+      "tokens": 204.84076433121018,
+      "front_high": 0.0
+    }
+  ]
+}

@@ -1,0 +1,182 @@
+{
+  "deadline|gov": {
+    "episodes": 3000,
+    "success_rate": 0.9733333333333334,
+    "success_ci": [
+      0.966934813333022,
+      0.9785211654376298
+    ],
+    "collision_rate": 0.025333333333333333,
+    "collision_ci": [
+      0.020288264994619245,
+      0.03159249995650201
+    ],
+    "collisions_per_km": 2.1269438643639726,
+    "time_to_goal": 3.4957123287671132,
+    "mean_speed": 3.344408358437474,
+    "tokens_per_tick": 108.60824082784572,
+    "violation_rate": 0.05263842995894663,
+    "violation_rate_cmd": 0.0464303594673075,
+    "violation_rate_age": 0.0835986782817663,
+    "violation_rate_rel": 0.019463781749764816,
+    "unseen_threat_rate": 0.4427469426152399,
+    "violation_causes": {
+      "ungoverned": 0.0,
+      "clearance_jump": 0.023016929807875213,
+      "direction_mismatch": 0.23416397184706106,
+      "dynamics_lag": 0.7428190983450638,
+      "latency_tail": 0.0,
+      "latency_switch": 0.0,
+      "staleness": 0.0,
+      "other": 0.0
+    },
+    "mean_latency": 0.09581186418620767,
+    "mean_age": 0.1417012115750476,
+    "stall_rate": 0.03168391345249295,
+    "km": 35.732019670733784
+  },
+  "deadline_v4|gov": {
+    "episodes": 3000,
+    "success_rate": 0.971,
+    "success_ci": [
+      0.9643664495111712,
+      0.9764288307725828
+    ],
+    "collision_rate": 0.027333333333333334,
+    "collision_ci": [
+      0.022075537235048376,
+      0.03380011213341367
+    ],
+    "collisions_per_km": 2.236097064049927,
+    "time_to_goal": 3.7229316855475334,
+    "mean_speed": 3.250413969253768,
+    "tokens_per_tick": 236.70638525247128,
+    "violation_rate": 0.056063895781637715,
+    "violation_rate_cmd": 0.051188352977667495,
+    "violation_rate_age": 0.12599837158808933,
+    "violation_rate_rel": 0.02084780479116573,
+    "unseen_threat_rate": 0.20546798468251848,
+    "violation_causes": {
+      "ungoverned": 0.0,
+      "clearance_jump": 0.02057399723374827,
+      "direction_mismatch": 0.26175656984785617,
+      "dynamics_lag": 0.7176694329183956,
+      "latency_tail": 0.0,
+      "latency_switch": 0.0,
+      "staleness": 0.0,
+      "other": 0.0
+    },
+    "mean_latency": 0.12942104626067613,
+    "mean_age": 0.25002229373449136,
+    "stall_rate": 0.05399412236174192,
+    "km": 36.671037817779236
+  },
+  "uniform_fixed|gov": {
+    "episodes": 3000,
+    "success_rate": 0.9666666666666667,
+    "success_ci": [
+      0.9596227522884362,
+      0.9725169450910796
+    ],
+    "collision_rate": 0.03133333333333333,
+    "collision_ci": [
+      0.025673657725234465,
+      0.03819176047790914
+    ],
+    "collisions_per_km": 2.575480241384693,
+    "time_to_goal": 3.747917241379298,
+    "mean_speed": 3.216441728268207,
+    "tokens_per_tick": 384.0,
+    "violation_rate": 0.0588473400154202,
+    "violation_rate_cmd": 0.05784502698535081,
+    "violation_rate_age": 0.1157864302235929,
+    "violation_rate_rel": 0.02036387471655329,
+    "unseen_threat_rate": 0.1609268707482993,
+    "violation_causes": {
+      "ungoverned": 0.0,
+      "clearance_jump": 0.02243694726498526,
+      "direction_mismatch": 0.21667212577792336,
+      "dynamics_lag": 0.7608909269570914,
+      "latency_tail": 0.0,
+      "latency_switch": 0.0,
+      "staleness": 0.0,
+      "other": 0.0
+    },
+    "mean_latency": 0.16800430360623772,
+    "mean_age": 0.2542819969159599,
+    "stall_rate": 0.05409403344671202,
+    "km": 36.49804742802508
+  },
+  "all_high|gov": {
+    "episodes": 3000,
+    "success_rate": 0.84,
+    "success_ci": [
+      0.8264475289732334,
+      0.8526828219746994
+    ],
+    "collision_rate": 0.08833333333333333,
+    "collision_ci": [
+      0.0786977572258567,
+      0.09902186687149919
+    ],
+    "collisions_per_km": 4.577813723989959,
+    "time_to_goal": 5.3058095238094864,
+    "mean_speed": 3.013930692733353,
+    "tokens_per_tick": 1536.0,
+    "violation_rate": 0.10115963340994749,
+    "violation_rate_cmd": 0.10288489929194625,
+    "violation_rate_age": 0.274178327649991,
+    "violation_rate_rel": 0.037405350041544085,
+    "unseen_threat_rate": 0.00037624828206079544,
+    "violation_causes": {
+      "ungoverned": 0.0,
+      "clearance_jump": 0.04280890516797344,
+      "direction_mismatch": 0.1890917415440966,
+      "dynamics_lag": 0.7659245693355463,
+      "latency_tail": 0.0021747839523836776,
+      "latency_switch": 0.0,
+      "staleness": 0.0,
+      "other": 0.0
+    },
+    "mean_latency": 0.462079585373188,
+    "mean_age": 0.7157560775095961,
+    "stall_rate": 0.8131509225921416,
+    "km": 57.887894959830234
+  },
+  "front_only|gov": {
+    "episodes": 3000,
+    "success_rate": 0.8656666666666667,
+    "success_ci": [
+      0.8529949697479495,
+      0.8774030645558568
+    ],
+    "collision_rate": 0.13366666666666666,
+    "collision_ci": [
+      0.12195668487808292,
+      0.14631365267899732
+    ],
+    "collisions_per_km": 11.825080898454765,
+    "time_to_goal": 3.3594840200230944,
+    "mean_speed": 3.35047769771046,
+    "tokens_per_tick": 256.0,
+    "violation_rate": 0.08181353517557882,
+    "violation_rate_cmd": 0.06795863103977032,
+    "violation_rate_age": 0.14478048568290322,
+    "violation_rate_rel": 0.06242855012674586,
+    "unseen_threat_rate": 0.42212833639842934,
+    "violation_causes": {
+      "ungoverned": 0.0,
+      "clearance_jump": 0.031104612521600426,
+      "direction_mismatch": 0.21374451681510037,
+      "dynamics_lag": 0.7551508706632992,
+      "latency_tail": 0.0,
+      "latency_switch": 0.0,
+      "staleness": 0.0,
+      "other": 0.0
+    },
+    "mean_latency": 0.10831704738685856,
+    "mean_age": 0.23459810990397267,
+    "stall_rate": 0.05570853422138277,
+    "km": 33.91097307861973
+  }
+}

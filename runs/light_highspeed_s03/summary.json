@@ -1,0 +1,38 @@
+{
+  "deadline|gov": {
+    "episodes": 600,
+    "success_rate": 1.0,
+    "success_ci": [
+      0.9936380666717896,
+      1.0
+    ],
+    "collision_rate": 0.0,
+    "collision_ci": [
+      0.0,
+      0.006361933328210577
+    ],
+    "collisions_per_km": 0.0,
+    "time_to_goal": 7.718666666666589,
+    "mean_speed": 5.385807265795888,
+    "tokens_per_tick": 267.29862707603723,
+    "violation_rate": 0.13345997526064676,
+    "violation_rate_cmd": 0.12762855628202863,
+    "violation_rate_age": 0.31047888319491074,
+    "violation_rate_rel": 0.013342500483423931,
+    "unseen_threat_rate": 0.429967986593043,
+    "violation_causes": {
+      "ungoverned": 0.0,
+      "clearance_jump": 0.0028136378682555446,
+      "direction_mismatch": 0.07547169811320754,
+      "dynamics_lag": 0.9217146640185369,
+      "latency_tail": 0.0,
+      "latency_switch": 0.0,
+      "staleness": 0.0,
+      "other": 0.0
+    },
+    "mean_latency": 0.12547081067372984,
+    "mean_age": 0.23779157094893094,
+    "stall_rate": 0.03678318973852137,
+    "km": 25.071518906994978
+  }
+}
