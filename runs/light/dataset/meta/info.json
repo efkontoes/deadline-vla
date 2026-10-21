@@ -1,0 +1,103 @@
+{
+  "repo_id": "local/deadlinevla_demos",
+  "format": "deadlinevla-npz",
+  "fps": 10.0,
+  "total_episodes": 24,
+  "total_frames": 704,
+  "features": {
+    "observation.images.cam0": {
+      "dtype": "uint8",
+      "shape": [
+        64,
+        64,
+        3
+      ]
+    },
+    "observation.images.cam1": {
+      "dtype": "uint8",
+      "shape": [
+        64,
+        64,
+        3
+      ]
+    },
+    "observation.images.cam2": {
+      "dtype": "uint8",
+      "shape": [
+        64,
+        64,
+        3
+      ]
+    },
+    "observation.images.cam3": {
+      "dtype": "uint8",
+      "shape": [
+        64,
+        64,
+        3
+      ]
+    },
+    "observation.images.cam4": {
+      "dtype": "uint8",
+      "shape": [
+        64,
+        64,
+        3
+      ]
+    },
+    "observation.images.cam5": {
+      "dtype": "uint8",
+      "shape": [
+        64,
+        64,
+        3
+      ]
+    },
+    "observation.state": {
+      "dtype": "float32",
+      "shape": [
+        7
+      ],
+      "names": [
+        "vx_b",
+        "vy_b",
+        "vz_b",
+        "yaw_rate",
+        "roll",
+        "pitch",
+        "z"
+      ]
+    },
+    "action": {
+      "dtype": "float32",
+      "shape": [
+        4
+      ],
+      "names": [
+        "vx_b",
+        "vy_b",
+        "vz_b",
+        "yaw_rate"
+      ]
+    },
+    "observation.clearance": {
+      "dtype": "float32",
+      "shape": [
+        1
+      ]
+    }
+  },
+  "cam_yaws": [
+    0.0,
+    60.0,
+    120.0,
+    180.0,
+    240.0,
+    300.0
+  ],
+  "rejected": {
+    "no_plan": 0,
+    "failed": 0
+  },
+  "format_written": "npz"
+}

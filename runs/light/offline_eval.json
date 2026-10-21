@@ -1,0 +1,18 @@
+{
+  "all_high": {
+    "loss": 0.367015807272808,
+    "tokens_per_sample": 1536.0
+  },
+  "forward_only": {
+    "loss": 0.46900168509539514,
+    "tokens_per_sample": 256.0
+  },
+  "uniform_low": {
+    "loss": 0.37604818787052086,
+    "tokens_per_sample": 96.0
+  },
+  "allocator": {
+    "loss": 0.3676376069765413,
+    "tokens_per_sample": 1122.5263157894738
+  }
+}

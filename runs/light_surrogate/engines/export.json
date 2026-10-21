@@ -1,0 +1,6 @@
+{
+  "policy": "surrogate",
+  "precision": "fp16",
+  "runtime": "simulated",
+  "note": "no engines: inference runs in-process and latency comes from the board model"
+}

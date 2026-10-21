@@ -1,0 +1,24 @@
+{"episode_index": 0, "length": 26, "task": "the purple chair is to your left, fly there", "family": "goal_nav", "seed": 0}
+{"episode_index": 1, "length": 20, "task": "the purple backpack is in front of you, fly there", "family": "rear_threat", "seed": 1}
+{"episode_index": 2, "length": 43, "task": "navigate to the box that is orange", "family": "slalom", "seed": 2}
+{"episode_index": 3, "length": 17, "task": "navigate to the cone that is red", "family": "goal_nav", "seed": 3}
+{"episode_index": 4, "length": 31, "task": "the red backpack is in front of you, fly there", "family": "rear_threat", "seed": 4}
+{"episode_index": 5, "length": 44, "task": "go to the blue backpack in front of you", "family": "slalom", "seed": 5}
+{"episode_index": 6, "length": 25, "task": "the red cone is to your right, fly there", "family": "goal_nav", "seed": 6}
+{"episode_index": 7, "length": 24, "task": "fly to the purple backpack", "family": "rear_threat", "seed": 7}
+{"episode_index": 8, "length": 43, "task": "the red chair is in front of you, fly there", "family": "slalom", "seed": 8}
+{"episode_index": 9, "length": 27, "task": "navigate to the barrel that is blue", "family": "goal_nav", "seed": 9}
+{"episode_index": 10, "length": 22, "task": "go to the orange box in front of you", "family": "rear_threat", "seed": 10}
+{"episode_index": 11, "length": 39, "task": "navigate to the box that is blue", "family": "slalom", "seed": 11}
+{"episode_index": 12, "length": 23, "task": "go to the blue barrel to your right", "family": "goal_nav", "seed": 12}
+{"episode_index": 13, "length": 18, "task": "navigate to the backpack that is blue", "family": "rear_threat", "seed": 13}
+{"episode_index": 14, "length": 39, "task": "fly to the yellow barrel", "family": "slalom", "seed": 14}
+{"episode_index": 15, "length": 22, "task": "navigate to the chair that is orange", "family": "goal_nav", "seed": 15}
+{"episode_index": 16, "length": 24, "task": "fly to the yellow box", "family": "rear_threat", "seed": 16}
+{"episode_index": 17, "length": 45, "task": "fly to the yellow chair", "family": "slalom", "seed": 17}
+{"episode_index": 18, "length": 26, "task": "go to the orange box in front of you", "family": "goal_nav", "seed": 18}
+{"episode_index": 19, "length": 22, "task": "fly to the purple cone", "family": "rear_threat", "seed": 19}
+{"episode_index": 20, "length": 39, "task": "fly to the green chair", "family": "slalom", "seed": 20}
+{"episode_index": 21, "length": 24, "task": "the green barrel is behind you, fly there", "family": "goal_nav", "seed": 21}
+{"episode_index": 22, "length": 19, "task": "the orange box is in front of you, fly there", "family": "rear_threat", "seed": 22}
+{"episode_index": 23, "length": 42, "task": "fly to the purple barrel", "family": "slalom", "seed": 23}
