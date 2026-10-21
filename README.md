@@ -105,6 +105,11 @@ Why P2 failed: the high-speed family did not produce high speeds. Even at a 15 m
 actually flown (96 below 4 m/s, 166 at 6–8, 267 at 8–10, 474 above 10 m/s, front camera at high in every
 tick above 10 m/s), while v4 stays flat at ~210.
 
+Diagnosis of those logs ([docs/diagnosis_v6.md](docs/diagnosis_v6.md)): the governor, not the policy, held the speed
+down (binding on 62% of v6 ticks: detected obstacles in the cone ahead), and v6's front camera chatters (1.9 tier
+switches per second at 8–10 m/s, v4: 0). Amendment 2 (draft) pre-registers an open high-speed scenario with a
+speed-only dry run first, the tokens-vs-speed slope as primary endpoint, and a hysteresis arm.
+
 ![high-speed results](docs/media/highspeed.png)
 
 ![tokens by speed](docs/media/tokens_by_speed.png)

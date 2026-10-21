@@ -1,0 +1,34 @@
+{
+  "deadline": {
+    "share_binding": {
+      "speed cap (policy at cruise)": 0.11667859699355762,
+      "policy: obstacle detected ahead": 0.24874731567644953,
+      "policy: slowing for the goal": 0.0024158911954187544,
+      "governor": 0.6171259842519685,
+      "waiting for the first chunk": 0.015032211882605583
+    },
+    "share_accelerating": 0.39307444523979956,
+    "share_ticks_above_9": 0.04894416607015032,
+    "front_switches_per_s": 1.2303149606299213,
+    "front_switches_per_s_8_10": 1.9417475728155338,
+    "time_in_8_10_s": 164.8,
+    "flickers": 141,
+    "switches": 1375
+  },
+  "deadline_v4": {
+    "share_binding": {
+      "speed cap (policy at cruise)": 0.052440917716060034,
+      "policy: obstacle detected ahead": 0.22287390029325513,
+      "policy: slowing for the goal": 0.0018975332068311196,
+      "governor": 0.6966534414352251,
+      "waiting for the first chunk": 0.0261342073486286
+    },
+    "share_accelerating": 0.393048128342246,
+    "share_ticks_above_9": 0.05433845092289115,
+    "front_switches_per_s": 0.055200966016905294,
+    "front_switches_per_s_8_10": 0.0,
+    "time_in_8_10_s": 170.70000000000002,
+    "flickers": 5,
+    "switches": 64
+  }
+}

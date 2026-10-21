@@ -82,6 +82,34 @@ identical scenes, governed. Comparison: `deadline_v4` (speed objective, fixed fl
 
 Holm correction across P1, P2b and P3 (the tests with p-values). All results are reported whatever they are.
 
+## 6. Amendment 2 (DRAFT, not yet signed): a test that actually reaches speed
+
+Status: **draft**. Informed only by the diagnosis of existing v6 logs (docs/diagnosis_v6.md), not by any new
+method run. Sign before running.
+
+**Scenario `open_highspeed`.** 80 m arena, goals 45–60 m away; scattered clutter kept outside a 6 m-wide
+corridor around the direct line; inside the corridor only small obstacles (0.5–0.8 m), at most one per 20 m,
+so the cone ahead is clear for long stretches. Caps 6/9/12/15 m/s.
+
+**Dry run first (speed only).** Fly v4 only, 30 development scenes (seeds below 10000), at the 15 m/s cap and
+record nothing but speed. Go if at least 30% of ticks exceed 9 m/s and at least 10% exceed 12 m/s; otherwise
+revise the scenario (still before any comparison) and repeat the dry run. No method comparison is looked at
+until the dry run passes.
+
+**Arms.** v6 coverage; v6 with hysteresis (step up a tier when the requirement exceeds the current tier's
+range, step down only when it falls below 85% of the lower tier's range: one parameter, fixed now); v4.
+
+| ID | Endpoint | Test and criterion |
+|---|---|---|
+| Q1 (primary) | Slope of tokens per tick against speed flown (tick level, per-episode slopes, paired by scene) | v6 slope > v4 slope; paired bootstrap 95% CI of the difference excludes 0 |
+| Q2 | Collisions with obstacles at caps 12 and 15 | v6 non-inferior to v4 (upper bound ≤ +1 pp); McNemar reported |
+| Q3 | Front-camera tier switches per second while flying 8–12 m/s | v6 + hysteresis below v6; paired bootstrap CI excludes 0 |
+| Q4 | Tokens per tick, collisions and success of v6 + hysteresis vs v6 | non-inferior collisions and success (+1 pp, −2 pp) |
+
+**Failure criteria, fixed now.** Q1 fails if the CI includes 0 or the sign is reversed; Q3 fails likewise.
+Failures are reported as failures. If the dry run cannot reach the speed criterion after two scenario
+revisions, the amendment is abandoned and that is reported.
+
 ## Sign-off
 
 | Date | Commit | Signed by | Notes |
@@ -92,4 +120,5 @@ Holm correction across P1, P2b and P3 (the tests with p-values). All results are
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
+| 2026-10-21 | 6 | Amendment 2 drafted (not signed): open_highspeed scenario, speed-only dry run, hysteresis arm | v6's P2 had no power: the drone rarely flew fast (governor-bound) |
 | 2026-10-21 | 5 | Coverage allocation (v6) added as `budget.objective: coverage`; `highspeed` scene family; `deadline_v4` comparison mode | The weights' speed ratio is scale-free, so the v4 allocation could not depend on speed (found while building the explainer animation) |

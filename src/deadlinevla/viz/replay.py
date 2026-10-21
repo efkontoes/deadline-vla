@@ -40,6 +40,8 @@ class Trace:
     latency: np.ndarray        # (T,) predicted latency of the allocation in force, s
     speed: np.ndarray          # (T,)
     outcome: str = ""           # goal reached | COLLISION | out of bounds | timeout
+    v_cmd: np.ndarray = field(default_factory=lambda: np.zeros(0))   # policy's commanded speed
+    v_gov: np.ndarray = field(default_factory=lambda: np.zeros(0))   # speed after the governor
     scene: Scene = field(repr=False, default=None)
 
 
@@ -94,6 +96,8 @@ def replay_cell(cfg: Config, scenes: Sequence[Scene], method: str, cap: float, t
             tr.tokens = np.asarray(lg["tokens"], dtype=float)
             tr.latency = np.array(rec["lat"])
             tr.speed = np.asarray(lg["speed"], dtype=float)
+            tr.v_cmd = np.asarray(lg["v_cmd"], dtype=float)
+            tr.v_gov = np.asarray(lg["v_gov"], dtype=float)
         traces.append(tr)
     return traces
 
