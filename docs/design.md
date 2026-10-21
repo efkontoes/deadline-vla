@@ -164,6 +164,41 @@ Wrong reading to avoid: this is not "always use few tokens". The allocator spend
 
 When hovering, $\hat{\mathbf{v}}$ is undefined: weights become uniform and the full 360 degree view serves the language task.
 
+### 4–5 (v6). Coverage allocation: requirements in metres (`budget.objective: coverage`)
+
+**Supersedes steps 4 and 5 when `budget.objective: coverage`.** Steps 4–5 (and the v2 speed objective) weight cameras by a ratio of speeds, $c_j / \max_k c_k$. A ratio of two speeds is unitless and throws away scale: 3 vs 1.5 m/s and 12 vs 6 m/s both give 0.5. No reshaping of that ratio (power, softmax, log) can recover it. That is why the v4 allocation never changed with speed (always front three mid, rest low, while moving). v6 deletes the weights, $\kappa$, $\epsilon$ and $Q_{\min}$, and states the requirement in metres: **every direction must be seen at least as far as the drone needs to survive what is closing from it.**
+
+For every direction $\theta$ (5° grid) and every detected contact $i$ (bearing $\beta_i$):
+
+$$c(\theta) = \max(0,\ \mathbf{v}\cdot\hat{\mathbf{u}}(\theta)), \qquad c_i = (\mathbf{v} - \mathbf{w}_i)\cdot\hat{\mathbf{r}}_i$$
+
+$$d_{\text{req}}(c, \mathbf{r}) = \min\Big(m + \tau(\mathbf{r})\, c + \frac{c^2}{2a},\ d_{\det}(3)\Big), \qquad \tau(\mathbf{r}) = L(\mathbf{r}) + \Delta t + \tau_{\text{track}}$$
+
+$$\text{reach}(\theta, \mathbf{r}) = \max_{j:\ \theta \in \mathrm{FOV}_j} d_{\det}(r_j), \qquad d_{\det}(r) = \frac{f_{\text{px}}(r)\, s}{p_{\min}}$$
+
+$$\mathbf{r}^{*} = \arg\min_{\mathbf{r}} L(\mathbf{r}) \quad \text{s.t.} \quad \text{reach}(\theta, \mathbf{r}) \ge d_{\text{req}}(c(\theta), \mathbf{r})\ \forall \theta, \quad \text{reach}(\beta_i, \mathbf{r}) \ge d_{\text{req}}(c_i, \mathbf{r})\ \forall i, \quad r_j \ge 1$$
+
+Ties go to fewer tokens. Every quantity is measured ($a$, $\tau_{\text{track}}$, the latency table) or physical ($s$, $p_{\min}$, FOV); there is no tuned shape parameter. It is the project's original deadline inequality, applied per direction to detection range instead of to latency.
+
+Five corrections to the first proposal of this rule:
+
+1. **Per direction, not per camera axis.** A camera sees 90°, so closing speed varies across its view: at 9 m/s the front-left camera's 50° direction closes at 5.8 m/s, not the 4.5 m/s of its axis. Each direction must be covered by *some* camera that sees far enough.
+2. **Infeasible requirements are capped at the high tier, not answered with the cheapest allocation.** At 13 m/s the front needs more than high tier's 16 m; "cheapest" would leave one low camera. Capping requires high where nothing suffices and lets the governor slow the drone, so all-high is always feasible.
+3. **Unseen threats contribute nothing.** A threat's closing speed exists only once some camera detects it. An undetected rear threat cannot raise the rear tier. Reserving range for unseen threats is what $o_{\max}$ did in v5's derived floor, which showed no gain. v6 is v5's derived floor with $o_{\max} = 0$, plus the observed closing speeds of detected contacts.
+4. **No task floor.** Removing $Q_{\min}$ removes the only guarantee of resolution for the language task (e.g. recognising "the red backpack behind you"); hovering is all-low. The surrogate reads the goal from ground truth, so it is unaffected. For a real VLA this is measured at M4 (pre-registration H4), not tuned now.
+5. **The latency term matters at the margin.** With the measured $\tau \approx 0.29$–$0.35$ s, 9 m/s already needs the front at high, not mid as with $\tau = 0.25$ s.
+
+Analytic allocations with the light run's latency table ($s = 0.5$ m, $p_{\min} = 8$, FOV 90°, $a = 8.4$, $m = 0.5$; computed before any simulation run of v6):
+
+| speed (m/s, straight ahead) | allocation (F, FL, BL, B, BR, FR) | tokens/tick | latency |
+|---|---|---|---|
+| 0 and 3 | all low | 96 | 103 ms |
+| 6 | front mid, rest low | 144 | 120 ms |
+| 9 to 11 | front high, front sides mid, rear low | 432 | 192 ms |
+| 13 | requirement capped: front high, others as needed | ≥ 432 | ≥ 192 ms |
+
+Front-low stops being enough above about 5.6 m/s. The scenes of v1–v5 are flown at roughly 3.5–4.5 m/s, so there v6 predicts nearly all-low; the speed dependence needs the high-speed family (`highspeed`: 80 m arena, goals 35–55 m away, sparse clutter, and a few obstacles placed close to the straight line from start to goal).
+
 ### 6. Budget-randomized training (`train/sft.py`)
 
 A pretrained VLA has never seen views switched off or at mixed resolutions. During fine-tuning we sample a random allocation for every training sample, with a learned embedding per view and per tier added to its tokens:
