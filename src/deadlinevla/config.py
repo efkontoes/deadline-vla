@@ -349,8 +349,8 @@ def validate(cfg: Config) -> None:
         raise ConfigError(f"sim.backend must be isaac or light, got {cfg.sim.backend!r}")
     if cfg.budget.floor not in ("derived", "fixed"):
         raise ConfigError("budget.floor must be derived or fixed")
-    if cfg.budget.objective not in ("speed", "quality"):
-        raise ConfigError("budget.objective must be speed or quality")
+    if cfg.budget.objective not in ("speed", "quality", "coverage"):
+        raise ConfigError("budget.objective must be speed, quality or coverage")
     if not cfg.sim.render and cfg.budget.clearance_source == "depth":
         raise ConfigError("budget.clearance_source=depth needs sim.render=true")
     if not cfg.sim.render and cfg.model.policy not in ("surrogate",):

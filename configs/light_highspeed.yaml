@@ -1,0 +1,19 @@
+# v6 high-speed test (pre-registered P2a-P2c, S1): long runs through sparse clutter with small obstacles
+# near the direct line, speed caps up to 15 m/s.
+base: light_coverage.yaml
+
+run:
+  out_dir: runs/light_highspeed
+
+sim:
+  arena: 80.0
+  max_episode_s: 40.0
+
+scenes:
+  families: [highspeed]
+  goal_dist: [35.0, 55.0]
+
+eval:
+  episodes_per_cell: 150
+  speed_caps: [6.0, 9.0, 12.0, 15.0]
+  family_episodes: {}

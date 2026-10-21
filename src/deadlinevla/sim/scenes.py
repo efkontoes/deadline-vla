@@ -6,6 +6,8 @@ class, and (for ``rear_threat``) one moving obstacle approaching from a side or 
 Families
     goal_nav     goals in any direction, including behind the start
     sparse_nav   goal_nav at a quarter of the clutter: the deadline binds only some of the time
+    highspeed    long runs (use a large arena and goal_dist) through sparse clutter, with small obstacles
+                 placed close to the straight line from start to goal: detection range at speed decides
     rear_threat  goal ahead, a moving obstacle crossing in from the rear/side
     slalom       rows of obstacles across the arena with one gap each, forcing fast flight through gaps
 """
@@ -25,8 +27,8 @@ PALETTE: dict[str, tuple[int, int, int]] = {
     "green": (40, 170, 70), "orange": (240, 135, 30), "purple": (150, 60, 190),
 }
 CLASSES = ("backpack", "cone", "box", "barrel", "chair")
-FAMILIES = ("goal_nav", "sparse_nav", "rear_threat", "slalom")
-_FAMILY_ID = {"goal_nav": 0, "rear_threat": 1, "slalom": 2, "sparse_nav": 3}  # stable RNG streams
+FAMILIES = ("goal_nav", "sparse_nav", "rear_threat", "slalom", "highspeed")
+_FAMILY_ID = {"goal_nav": 0, "rear_threat": 1, "slalom": 2, "sparse_nav": 3, "highspeed": 4}  # stable streams
 OBSTACLE_HEIGHT = 6.0
 
 
@@ -193,7 +195,8 @@ def build_scene(family: str, seed: int, cfg: Optional[Config] = None) -> Scene:
             break
 
     keep = [(start_xy, 1.8), (goal, 1.4)]
-    density = sc.clutter_density * {"goal_nav": 1.0, "sparse_nav": 0.25, "rear_threat": 0.6, "slalom": 0.0}[family]
+    clutter = {"goal_nav": 1.0, "sparse_nav": 0.25, "rear_threat": 0.6, "slalom": 0.0, "highspeed": 0.15}
+    density = sc.clutter_density * clutter[family]
     n = int(round(density * A * A))
     xy, r = _scatter(rng, n, A, sc.obstacle_radius, keep)
     meta: dict = {"bearing": bearing}
@@ -220,6 +223,22 @@ def build_scene(family: str, seed: int, cfg: Optional[Config] = None) -> Scene:
             rows.append(float(s))
             s += 4.5
         meta["rows"] = rows
+
+    if family == "highspeed":
+        # Small obstacles (0.5-0.8 m) near the direct line, 9-14 m apart: at speed, the drone must detect
+        # them far enough ahead to brake or swerve.
+        perp = np.array([-goal_dir[1], goal_dir[0]])
+        s = rng.uniform(10.0, 14.0)
+        placed = []
+        while s < dist - 6.0:
+            rr = rng.uniform(0.25, 0.4)
+            p = start_xy + s * goal_dir + rng.uniform(-1.0, 1.0) * perp
+            if (np.abs(p) < half - 0.5).all():
+                xy.append(p)
+                r.append(rr)
+                placed.append(float(s))
+            s += rng.uniform(9.0, 14.0)
+        meta["path_obstacles"] = placed
 
     mover = None
     if family == "rear_threat":

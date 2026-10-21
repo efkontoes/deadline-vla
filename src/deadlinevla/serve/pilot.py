@@ -15,7 +15,14 @@ from typing import Any, Optional
 
 import numpy as np
 
-from deadlinevla.budget.allocator import camera_axes, choose_allocation, coverage_mask, quality_table, view_weights
+from deadlinevla.budget.allocator import (
+    CoverageAllocator,
+    camera_axes,
+    choose_allocation,
+    coverage_mask,
+    quality_table,
+    view_weights,
+)
 from deadlinevla.budget.clearance import estimate_clearance
 from deadlinevla.budget.deadline import max_latency
 from deadlinevla.budget.governor import cap_speed, govern, safe_speed
@@ -38,7 +45,9 @@ from deadlinevla.policy.base import PolicyAdapter
 from deadlinevla.serve.executor import ChunkExecutor
 from deadlinevla.sim.scenes import obstacle_kinematics
 
-MODES = ("deadline", "deadline_fixed", "deadline_v1") + BASELINES
+# deadline: budget.objective (speed | quality | coverage); deadline_v4: the v4 allocator (speed objective,
+# fixed floor) whatever the config says, as the v6 comparison
+MODES = ("deadline", "deadline_fixed", "deadline_v1", "deadline_v4") + BASELINES
 
 
 class Pilot:
@@ -56,6 +65,10 @@ class Pilot:
         self.tau_track = tau_track(cfg)
         # detection range per tier for the design threat (derived coverage floor)
         self.det_by_tier = detection_range(np.arange(4), np.full(4, cfg.budget.floor_threat_size), cfg)
+        self.coverage = (CoverageAllocator(latency, cfg.cameras.cam_yaws, cfg.cameras.fov, self.det_by_tier,
+                                           cfg.tier_tokens)
+                         if cfg.budget.objective == "coverage" and mode == "deadline" else None)
+        self._contacts_seen: Optional[Contacts] = None
         self.axes = camera_axes(cfg.cameras.cam_yaws)
         self.quality = quality_table(cfg.budget.quality_fn, cfg.tier_tokens)
         self.tokens = np.asarray(cfg.tier_tokens)
@@ -78,6 +91,16 @@ class Pilot:
     def choose_alloc(self, v_body: np.ndarray, L_max: float,
                      weights: Optional[np.ndarray] = None) -> tuple[np.ndarray, float]:
         b = self.cfg.budget
+        if self.coverage is not None:
+            # v6: requirements in metres per direction and per detected contact (no weights)
+            con = self._contacts_seen
+            bearings = np.arctan2(con.p[:, 1], con.p[:, 0]) if con is not None and len(con) else np.zeros(0)
+            closing = con.closing(v_body) if con is not None and len(con) else np.zeros(0)
+            return self.coverage.allocate(v_body, self.a, self.cfg.drone.margin, self.cfg.dt + self.tau_track,
+                                          bearings, closing)
+        if self.mode == "deadline_v4":
+            w = view_weights(v_body, self.axes, b.kappa, b.epsilon, b.hover_speed) if weights is None else weights
+            return choose_allocation(w, L_max, self.latency, self.quality, "speed", b.qmin_mid_weight, None)
         if self.mode in ("deadline", "deadline_fixed", "deadline_v1"):
             w = weights if weights is not None else view_weights(v_body, self.axes, b.kappa, b.epsilon,
                                                                  b.hover_speed)
@@ -129,6 +152,7 @@ class Pilot:
             # (perception.governor = camera); the oracle ablation sees everything.
             con = self.contacts(obs, v_body)
             con_prev = self.seen(con, self.alloc)
+            self._contacts_seen = con_prev
             L_max = relative_deadline(con_prev, v_body, self.a, cfg.drone.margin, b.cone_deg)
             weights = closing_weights(camera_closing(con_prev, v_body, self.axes), b.kappa, b.epsilon,
                                       b.hover_speed)

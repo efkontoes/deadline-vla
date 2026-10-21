@@ -1,0 +1,13 @@
+# v6: coverage allocation (requirements in metres, design.md "4-5 (v6)") on the v4 families, against the
+# v4 allocator (deadline_v4) and the baselines. Pre-registered in docs/preregistration.md, amendment 1.
+base: light_surrogate.yaml
+
+run:
+  out_dir: runs/light_coverage
+
+budget:
+  objective: coverage
+
+eval:
+  methods: [deadline, deadline_v4, uniform_fixed, all_high, front_only]
+  governor: [true]

@@ -156,3 +156,66 @@ def allocate(weights: np.ndarray, L_max: float, table: LatencyModel,
     if i is None:
         i = int(np.argmin(lat))
     return np.array(allocs[i], dtype=np.int64), float(lat[i])
+
+
+class CoverageAllocator:
+    """v6: requirements in metres, per direction (design.md, "4-5 (v6)"). No weights, no kappa, no Q_min.
+
+    Every direction theta (5 deg grid) and every detected contact must be covered by some camera whose
+    detection range reaches what the drone needs to cancel the closing speed from there:
+
+        d_req(c, r) = min(m + tau(r) c + c^2 / 2a, d_det(high)),   tau(r) = L(r) + extra_blind
+        r* = argmin L(r)  s.t.  reach(theta, r) >= d_req(c(theta), r) for all theta and contacts,  r_j >= 1
+
+    Capping at the high tier keeps all-high feasible: where nothing suffices the camera is required at high
+    and the governor slows the drone. Ties go to fewer tokens.
+    """
+
+    def __init__(self, table: LatencyModel, cam_yaws_deg: Sequence[float], fov_deg: float,
+                 det_by_tier: np.ndarray, tier_tokens: Sequence[int], step_deg: float = 5.0):
+        self.allocs = table.allocs
+        self.lat = table.predict_all()
+        self.tokens = np.asarray(tier_tokens)[self.allocs].sum(axis=1)
+        self.yaws = np.radians(np.asarray(cam_yaws_deg, dtype=np.float64))
+        self.half_fov = math.radians(fov_deg) / 2
+        self.det = np.asarray(det_by_tier, dtype=np.float64)
+        self.det_alloc = self.det[self.allocs]                                    # (N, V)
+        self.floor = (self.allocs >= 1).all(axis=1)
+        self.theta = np.radians(np.arange(0.0, 360.0, step_deg))
+        self.u = np.stack([np.cos(self.theta), np.sin(self.theta)], axis=1)       # (D, 2)
+        self.reach_grid = self.reach(self.theta)                                  # (N, D)
+
+    def cover(self, bearings: np.ndarray) -> np.ndarray:
+        off = (np.asarray(bearings)[:, None] - self.yaws[None] + math.pi) % (2 * math.pi) - math.pi
+        return np.abs(off) <= self.half_fov + 1e-9                                # (D, V)
+
+    def reach(self, bearings: np.ndarray) -> np.ndarray:
+        cov = self.cover(bearings)
+        return (self.det_alloc[:, None, :] * cov[None]).max(axis=2)              # (N, D)
+
+    def required(self, closing: np.ndarray, a: float, m: float, extra_blind: float) -> np.ndarray:
+        c = np.maximum(np.asarray(closing, dtype=np.float64), 0.0)
+        tau = self.lat + extra_blind
+        req = m + tau[:, None] * c[None] + c[None] ** 2 / (2 * a)
+        return np.minimum(req, self.det[3])                                       # (N, D)
+
+    def feasible(self, v_body: np.ndarray, a: float, m: float, extra_blind: float,
+                 contact_bearings: Sequence[float] = (), contact_closing: Sequence[float] = ()) -> np.ndarray:
+        v = np.asarray(v_body, dtype=np.float64)[:2]
+        ok = self.floor & (self.reach_grid >= self.required(self.u @ v, a, m, extra_blind) - 1e-9).all(axis=1)
+        cb = np.asarray(contact_bearings, dtype=np.float64)
+        cc = np.asarray(contact_closing, dtype=np.float64)
+        sel = cc > 1e-6
+        if sel.any():
+            ok &= (self.reach(cb[sel]) >= self.required(cc[sel], a, m, extra_blind) - 1e-9).all(axis=1)
+        return ok
+
+    def allocate(self, v_body: np.ndarray, a: float, m: float, extra_blind: float,
+                 contact_bearings: Sequence[float] = (), contact_closing: Sequence[float] = ()
+                 ) -> tuple[np.ndarray, float]:
+        ok = self.feasible(v_body, a, m, extra_blind, contact_bearings, contact_closing)
+        idx = np.flatnonzero(ok)
+        if not len(idx):                     # cannot happen (all-high is always feasible), but never go blind
+            idx = np.flatnonzero((self.allocs == 3).all(axis=1))
+        best = idx[np.lexsort((self.tokens[idx], self.lat[idx]))[0]]
+        return np.array(self.allocs[best], dtype=np.int64), float(self.lat[best])

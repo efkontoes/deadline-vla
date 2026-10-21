@@ -90,7 +90,7 @@ budget:
   hover_speed: 0.3
   max_residual: 0.005     # s; worst linear-fit residual above which predict uses the table
   floor_ignore_z: 0.2     # depth clearance ignores points below this height
-  objective: speed        # speed: cheapest allocation meeting Q_min (v2) | quality: max quality s.t. L <= L_max (v1)
+  objective: speed        # speed: cheapest meeting Q_min (v2) | quality: v1 | coverage: requirements in metres (v6)
   qmin_mid_weight: 0.25   # Q_min: views with weight >= this need mid tier, the rest low
   governor_delays: true   # governor blind time = L + control period + tracking time constant
   relative: true          # v3: deadline, weights and governor from every obstacle's closing speed
